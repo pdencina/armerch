@@ -16,24 +16,27 @@ export default function LoginPage() {
     setError('')
 
     const supabase = createClient()
+
     const { data, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
     if (authError) {
-      setError('Credenciales incorrectas: ' + authError.message)
+      setError('Error: ' + authError.message)
       setLoading(false)
       return
     }
 
-    if (data?.session) {
-      window.location.href = '/dashboard'
+    if (!data.session) {
+      setError('No se obtuvo sesión. Intenta nuevamente.')
+      setLoading(false)
       return
     }
 
-    setError('No se pudo iniciar sesión. Intenta nuevamente.')
-    setLoading(false)
+    // Esperar que la cookie se escriba y luego redirigir
+    await new Promise(resolve => setTimeout(resolve, 500))
+    window.location.replace('/dashboard')
   }
 
   return (
@@ -79,7 +82,7 @@ export default function LoginPage() {
           {error && <div className="ler">{error}</div>}
           <button type="submit" disabled={loading} className="lbtn">
             {loading && <span className="lsp" />}
-            {loading ? 'Verificando...' : 'Ingresar'}
+            {loading ? 'Ingresando...' : 'Ingresar'}
           </button>
         </form>
 
