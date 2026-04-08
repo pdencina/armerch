@@ -1,31 +1,29 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import { Toaster } from 'sonner'
+import { Plus_Jakarta_Sans, Sora } from 'next/font/google'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  variable: '--font-plus-jakarta',
+  weight: ['400', '500', '600', '700', '800'],
+})
+
+const sora = Sora({
+  subsets: ['latin'],
+  variable: '--font-sora',
+  weight: ['600', '700', '800'],
+})
 
 export const metadata: Metadata = {
-  title: 'ARM Merch',
-  description: 'Sistema de Merchandising · Iglesia ARM',
+  title: 'Iglesia Stats',
+  description: 'Plataforma de estadísticas de encuentros',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
-      <body className={inter.className}>
+    <html lang="es" className={`${plusJakarta.variable} ${sora.variable}`}>
+      <body className="bg-ink-50 min-h-screen antialiased">
         {children}
-        <Toaster
-          theme="dark"
-          position="bottom-right"
-          toastOptions={{
-            style: {
-              background: '#18181b',
-              border: '0.5px solid #3f3f46',
-              color: '#f4f4f5',
-            },
-          }}
-        />
       </body>
     </html>
   )
