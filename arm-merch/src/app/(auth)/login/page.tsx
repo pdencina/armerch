@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import './login.css'
 
@@ -10,21 +9,31 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
-  const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
+
     const supabase = createClient()
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
     if (authError) {
-      setError('Credenciales incorrectas')
+      setError('Credenciales incorrectas: ' + authError.message)
       setLoading(false)
       return
     }
-    router.push('/dashboard')
-    router.refresh()
+
+    if (data?.session) {
+      window.location.href = '/dashboard'
+      return
+    }
+
+    setError('No se pudo iniciar sesión. Intenta nuevamente.')
+    setLoading(false)
   }
 
   return (
