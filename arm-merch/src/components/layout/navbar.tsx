@@ -2,14 +2,11 @@
 
 import { LogOut, Bell } from 'lucide-react'
 import { logout } from '@/lib/actions/auth'
-import type { Database } from '@/types/database.types'
 
-type Profile = Database['public']['Tables']['profiles']['Row']
-
-export default function Navbar({ user }: { user: Profile }) {
-  const initials = user.full_name
+export default function Navbar({ user }: { user: any }) {
+  const initials = (user?.full_name ?? 'U')
     .split(' ')
-    .map(w => w[0])
+    .map((w: string) => w[0])
     .slice(0, 2)
     .join('')
     .toUpperCase()
@@ -21,17 +18,17 @@ export default function Navbar({ user }: { user: Profile }) {
         <button className="text-zinc-500 hover:text-white transition p-1.5 rounded-lg hover:bg-zinc-800">
           <Bell size={16} />
         </button>
-
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center">
             <span className="text-[10px] font-bold text-amber-400">{initials}</span>
           </div>
           <div className="hidden sm:block">
-            <p className="text-xs font-medium text-white leading-none">{user.full_name}</p>
-            <p className="text-[10px] text-zinc-500 mt-0.5 capitalize">{user.role.replace('_', ' ')}</p>
+            <p className="text-xs font-medium text-white leading-none">{user?.full_name}</p>
+            <p className="text-[10px] text-zinc-500 mt-0.5 capitalize">
+              {user?.role?.replace('_', ' ')}
+            </p>
           </div>
         </div>
-
         <form action={logout}>
           <button
             type="submit"
