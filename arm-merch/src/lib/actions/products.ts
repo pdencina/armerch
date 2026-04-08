@@ -20,7 +20,6 @@ export async function upsertProduct(formData: FormData) {
 
   if (!name || isNaN(price)) return { error: 'Nombre y precio son obligatorios' }
 
-  // Subir imagen si existe
   let image_url: string | null = null
   if (imageFile && imageFile.size > 0) {
     const ext      = imageFile.name.split('.').pop()
@@ -46,21 +45,19 @@ export async function upsertProduct(formData: FormData) {
   }
 
   if (id) {
-    // Actualizar producto existente
     const { error } = await supabase.from('products').update(payload).eq('id', id)
     if (error) return { error: error.message }
 
-    // Actualizar alerta de stock
     await supabase.from('inventory')
       .update({ low_stock_alert, updated_by: user.id })
       .eq('product_id', id)
   } else {
-    // Crear nuevo producto
-    const { data: product, error } = await supabase
+    const { data: productRaw, error } = await supabase
       .from('products').insert(payload).select().single()
     if (error) return { error: error.message }
 
-    // Crear registro de inventario inicial
+    const product = productRaw as { id: string }
+
     await supabase.from('inventory').insert({
       product_id: product.id,
       stock,
@@ -68,7 +65,6 @@ export async function upsertProduct(formData: FormData) {
       updated_by: user.id,
     })
 
-    // Si hay stock inicial, registrar movimiento de entrada
     if (stock > 0) {
       await supabase.from('inventory_movements').insert({
         product_id: product.id,

@@ -24,10 +24,9 @@ export async function createOrder(input: CreateOrderInput) {
 
   const subtotal = input.items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0)
   const discount = input.discount ?? 0
-  const total = subtotal - discount
+  const total    = subtotal - discount
 
-  // 1. Crear la orden
-  const { data: order, error: orderError } = await supabase
+  const { data: orderRaw, error: orderError } = await supabase
     .from('orders')
     .insert({
       seller_id: user.id,
@@ -43,14 +42,14 @@ export async function createOrder(input: CreateOrderInput) {
 
   if (orderError) return { error: orderError.message }
 
-  // 2. Insertar items
+  const order = orderRaw as { id: string; order_number: number }
+
   const { error: itemsError } = await supabase
     .from('order_items')
     .insert(input.items.map(i => ({ ...i, order_id: order.id })))
 
   if (itemsError) return { error: itemsError.message }
 
-  // 3. Completar la orden (esto dispara el trigger de descuento de stock)
   const { error: completeError } = await supabase
     .from('orders')
     .update({ status: 'completada' })
@@ -82,5 +81,5 @@ export async function getOrders() {
     .order('created_at', { ascending: false })
 
   if (error) return { error: error.message, data: [] }
-  return { data }
+  return { data: (data ?? []) as any[] }
 }

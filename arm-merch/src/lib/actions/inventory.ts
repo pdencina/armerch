@@ -16,14 +16,14 @@ export async function registerMovement(input: MovementInput) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'No autenticado' }
 
-  // Verificar stock suficiente si es salida o ajuste
   if (input.type !== 'entrada') {
-    const { data: inv } = await supabase
+    const { data: invRaw } = await supabase
       .from('inventory')
       .select('stock')
       .eq('product_id', input.product_id)
       .single()
 
+    const inv = invRaw as { stock: number } | null
     if (!inv || (inv.stock - input.quantity) < 0) {
       return { error: 'Stock insuficiente para este movimiento' }
     }
@@ -66,5 +66,5 @@ export async function getMovements(productId?: string) {
 
   const { data, error } = await query
   if (error) return { error: error.message, data: [] }
-  return { data }
+  return { data: (data ?? []) as any[] }
 }

@@ -11,14 +11,13 @@ export async function updateUserRole(userId: string, role: Role) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'No autenticado' }
 
-  const { data: caller } = await supabase
+  const { data: callerRaw } = await supabase
     .from('profiles').select('role').eq('id', user.id).single()
 
+  const caller = callerRaw as { role: string } | null
   if (caller?.role !== 'super_admin') return { error: 'Sin permisos' }
 
-  const { error } = await supabase
-    .from('profiles').update({ role }).eq('id', userId)
-
+  const { error } = await supabase.from('profiles').update({ role }).eq('id', userId)
   if (error) return { error: error.message }
 
   revalidatePath('/settings/users')
@@ -31,14 +30,13 @@ export async function toggleUserActive(userId: string, active: boolean) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'No autenticado' }
 
-  const { data: caller } = await supabase
+  const { data: callerRaw } = await supabase
     .from('profiles').select('role').eq('id', user.id).single()
 
+  const caller = callerRaw as { role: string } | null
   if (caller?.role !== 'super_admin') return { error: 'Sin permisos' }
 
-  const { error } = await supabase
-    .from('profiles').update({ active }).eq('id', userId)
-
+  const { error } = await supabase.from('profiles').update({ active }).eq('id', userId)
   if (error) return { error: error.message }
 
   revalidatePath('/settings/users')
