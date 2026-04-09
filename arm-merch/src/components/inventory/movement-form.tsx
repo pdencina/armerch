@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { X, TrendingUp, TrendingDown, RefreshCw, Loader2 } from 'lucide-react'
-import { registerMovement } from '@/lib/actions/inventory'
+import { createClient } from '@/lib/supabase/client'
 
 interface Props {
   product: any
@@ -20,12 +20,12 @@ const TYPES = [
 ]
 
 export default function MovementForm({ product, campus, onClose, onSuccess }: Props) {
-  const [type, setType]           = useState<MovType>('entrada')
-  const [quantity, setQuantity]   = useState('')
-  const [notes, setNotes]         = useState('')
-  const [campusId, setCampusId]   = useState(product.campus_id ?? '')
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState('')
+  const [type, setType]         = useState<MovType>('entrada')
+  const [quantity, setQuantity] = useState('')
+  const [notes, setNotes]       = useState('')
+  const [campusId, setCampusId] = useState(product.campus_id ?? '')
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState('')
 
   const currentStock = product.stock ?? 0
   const qty          = parseInt(quantity) || 0
@@ -37,16 +37,51 @@ export default function MovementForm({ product, campus, onClose, onSuccess }: Pr
     if (type !== 'entrada' && qty > currentStock) {
       setError(`No puedes sacar más de lo que hay (${currentStock} uds.)`); return
     }
+
     setLoading(true)
     setError('')
-    const result = await registerMovement({
+
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      setError('Sesión expirada. Recarga la página.')
+      setLoading(false)
+      return
+    }
+
+    // Registrar movimiento
+    const { error: movError } = await supabase.from('inventory_movements').insert({
       product_id: product.id,
       type,
-      quantity: qty,
-      notes: notes.trim() || undefined,
-      campus_id: campusId || undefined,
+      quantity:   qty,
+      notes:      notes.trim() || null,
+      created_by: session.user.id,
     })
-    if (result?.error) { setError(result.error); setLoading(false); return }
+
+    if (movError) {
+      setError('Error: ' + movError.message)
+      setLoading(false)
+      return
+    }
+
+    // Actualizar stock manualmente (el trigger puede no ejecutarse desde el cliente)
+    const newStock = type === 'entrada' ? currentStock + qty : currentStock - qty
+    const { error: invError } = await supabase.from('inventory')
+      .update({
+        stock:      newStock,
+        updated_by: session.user.id,
+        updated_at: new Date().toISOString(),
+        ...(campusId ? { campus_id: campusId } : {}),
+      })
+      .eq('product_id', product.id)
+
+    if (invError) {
+      setError('Error al actualizar stock: ' + invError.message)
+      setLoading(false)
+      return
+    }
+
     onSuccess()
   }
 
@@ -73,12 +108,13 @@ export default function MovementForm({ product, campus, onClose, onSuccess }: Pr
 
           {/* Campus */}
           <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">Campus</label>
+            <label className="block text-xs text-zinc-500 mb-1.5">Asignar a campus</label>
             <select value={campusId} onChange={e => setCampusId(e.target.value)}
               className="w-full bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition">
-              <option value="">Sin campus asignado</option>
+              <option value="">Sin campus (inventario general)</option>
               {campus.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+            <p className="text-[10px] text-zinc-600 mt-1">Al asignar campus, este producto queda asociado a esa sede</p>
           </div>
 
           {/* Tipo */}
@@ -98,7 +134,8 @@ export default function MovementForm({ product, campus, onClose, onSuccess }: Pr
           {/* Cantidad */}
           <div>
             <label className="block text-xs text-zinc-500 mb-1.5">Cantidad</label>
-            <input type="number" min="1" value={quantity} onChange={e => { setQuantity(e.target.value); setError('') }}
+            <input type="number" min="1" value={quantity}
+              onChange={e => { setQuantity(e.target.value); setError('') }}
               placeholder="0" required
               className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600
                          rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition text-center text-lg font-bold" />
@@ -107,9 +144,16 @@ export default function MovementForm({ product, campus, onClose, onSuccess }: Pr
           {/* Preview */}
           {qty > 0 && (
             <div className={`rounded-xl px-4 py-3 flex items-center justify-between border
-              ${preview < 0 ? 'bg-red-500/10 border-red-500/20' : preview <= (product.low_stock_alert ?? 5) ? 'bg-orange-500/10 border-orange-500/20' : 'bg-green-500/10 border-green-500/20'}`}>
+              ${preview < 0
+                ? 'bg-red-500/10 border-red-500/20'
+                : preview <= (product.low_stock_alert ?? 5)
+                  ? 'bg-orange-500/10 border-orange-500/20'
+                  : 'bg-green-500/10 border-green-500/20'}`}>
               <span className="text-xs text-zinc-400">Stock resultante</span>
-              <span className={`text-lg font-bold ${preview < 0 ? 'text-red-400' : preview <= (product.low_stock_alert ?? 5) ? 'text-orange-400' : 'text-green-400'}`}>
+              <span className={`text-lg font-bold ${
+                preview < 0 ? 'text-red-400' :
+                preview <= (product.low_stock_alert ?? 5) ? 'text-orange-400' : 'text-green-400'
+              }`}>
                 {preview < 0 ? 'Insuficiente' : `${preview} uds.`}
               </span>
             </div>
@@ -119,12 +163,14 @@ export default function MovementForm({ product, campus, onClose, onSuccess }: Pr
           <div>
             <label className="block text-xs text-zinc-500 mb-1.5">Notas <span className="text-zinc-600">(opcional)</span></label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)}
-              placeholder="Ej: Compra para evento, donación..." rows={2}
+              placeholder="Ej: Asignación para evento, donación..." rows={2}
               className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600
                          rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition resize-none" />
           </div>
 
-          {error && <p className="text-red-400 text-xs bg-red-950/40 border border-red-900 rounded-lg px-3 py-2">{error}</p>}
+          {error && (
+            <p className="text-red-400 text-xs bg-red-950/40 border border-red-900 rounded-lg px-3 py-2">{error}</p>
+          )}
 
           <div className="flex gap-2">
             <button type="button" onClick={onClose}
