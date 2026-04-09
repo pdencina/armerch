@@ -16,7 +16,7 @@ const fmt = (n: number) =>
   new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(n)
 
 export default function Cart() {
-  const { items, removeItem, updateQuantity, setPaymentMethod,
+  const { items, updateQuantity, setPaymentMethod,
           paymentMethod, clearCart, subtotal, total, itemCount } = useCart()
   const [showCheckout, setShowCheckout] = useState(false)
   const [clientName, setClientName]     = useState('')
@@ -24,11 +24,17 @@ export default function Cart() {
 
   const canCheckout = items.length > 0 && clientName.trim().length > 0
 
+  function handleNewSale() {
+    // Solo cerrar modal y limpiar campos — el carrito ya fue limpiado por el modal
+    setShowCheckout(false)
+    setClientName('')
+    setClientEmail('')
+  }
+
   return (
     <>
       <div className="w-72 xl:w-80 flex flex-col bg-zinc-900 border-l border-zinc-800 shrink-0">
 
-        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3.5 border-b border-zinc-800">
           <div className="flex items-center gap-2">
             <ShoppingCart size={16} className="text-zinc-400" />
@@ -44,7 +50,6 @@ export default function Cart() {
           </div>
         </div>
 
-        {/* Items */}
         <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-2">
           {items.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-zinc-700 gap-3 py-10">
@@ -73,10 +78,7 @@ export default function Cart() {
           )}
         </div>
 
-        {/* Footer */}
         <div className="px-4 py-4 border-t border-zinc-800 flex flex-col gap-3">
-
-          {/* Nombre */}
           <div>
             <label className="block text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5">
               Nombre del cliente <span className="text-red-400">*</span>
@@ -87,7 +89,6 @@ export default function Cart() {
                          rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-500 transition" />
           </div>
 
-          {/* Email opcional */}
           <div>
             <label className="block text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5">
               Email <span className="text-zinc-600">(voucher por correo)</span>
@@ -98,7 +99,6 @@ export default function Cart() {
                          rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-500 transition" />
           </div>
 
-          {/* Método de pago */}
           <div className="grid grid-cols-4 gap-1">
             {PAYMENT_METHODS.map(m => (
               <button key={m.value} onClick={() => setPaymentMethod(m.value)}
@@ -112,7 +112,6 @@ export default function Cart() {
             ))}
           </div>
 
-          {/* Total */}
           <div className="flex items-baseline justify-between">
             <span className="text-xs text-zinc-500">Total a cobrar</span>
             <span className="text-xl font-bold text-white">{fmt(total())}</span>
@@ -135,7 +134,7 @@ export default function Cart() {
           clientName={clientName.trim()}
           clientEmail={clientEmail.trim()}
           onClose={() => setShowCheckout(false)}
-          onSuccess={() => { setShowCheckout(false); setClientName(''); setClientEmail('') }}
+          onNewSale={handleNewSale}
         />
       )}
     </>

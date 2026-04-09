@@ -9,7 +9,7 @@ interface Props {
   clientName: string
   clientEmail: string
   onClose: () => void
-  onSuccess: () => void
+  onNewSale: () => void  // solo se llama desde el botón "Nueva venta"
 }
 
 const fmt = (n: number) =>
@@ -27,12 +27,12 @@ interface OrderSnapshot {
   items: { name: string; quantity: number; price: number }[]
 }
 
-export default function CheckoutModal({ clientName, clientEmail, onClose, onSuccess }: Props) {
+export default function CheckoutModal({ clientName, clientEmail, onClose, onNewSale }: Props) {
   const { items, paymentMethod, subtotal, total, discount, clearCart } = useCart()
-  const [step, setStep]         = useState<Step>('confirm')
-  const [error, setError]       = useState('')
-  const [snapshot, setSnapshot] = useState<OrderSnapshot | null>(null)
-  const [emailSent, setEmailSent] = useState(false)
+  const [step, setStep]             = useState<Step>('confirm')
+  const [error, setError]           = useState('')
+  const [snapshot, setSnapshot]     = useState<OrderSnapshot | null>(null)
+  const [emailSent, setEmailSent]   = useState(false)
   const [emailSending, setEmailSending] = useState(false)
 
   async function handleConfirm() {
@@ -68,11 +68,12 @@ export default function CheckoutModal({ clientName, clientEmail, onClose, onSucc
     setSnapshot(finalSnap)
     clearCart()
 
-    // Enviar email automáticamente si hay email
+    // Enviar email automáticamente si hay correo
     if (clientEmail && clientEmail.includes('@')) {
       sendEmail(finalSnap, clientEmail)
     }
 
+    // Mostrar pantalla de éxito — NO cerrar el modal
     setStep('success')
   }
 
@@ -101,7 +102,7 @@ export default function CheckoutModal({ clientName, clientEmail, onClose, onSucc
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
       *{margin:0;padding:0;box-sizing:border-box}
       body{font-family:'Courier New',monospace;font-size:12px;width:80mm;padding:4mm;color:#000;background:#fff}
-      .c{text-align:center}.r{text-align:right}.b{font-weight:bold}.lg{font-size:16px}.xl{font-size:20px}
+      .c{text-align:center}.r{text-align:right}.b{font-weight:bold}.xl{font-size:20px}
       .d{border-top:1px dashed #000;margin:6px 0}
       .row{display:flex;justify-content:space-between;margin:2px 0}
       .m{color:#555;font-size:11px}.t{font-size:16px;font-weight:bold}
@@ -130,16 +131,25 @@ export default function CheckoutModal({ clientName, clientEmail, onClose, onSucc
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:50 }}
-      onClick={e => { if (e.target === e.currentTarget && step !== 'loading') onClose() }}>
+      onClick={e => {
+        // Solo cerrar con click fuera si NO estamos en éxito (para que puedan imprimir)
+        if (e.target === e.currentTarget && step === 'confirm') onClose()
+      }}>
       <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-sm mx-4 overflow-hidden">
 
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
           <h2 className="text-sm font-semibold text-white">
-            {step === 'success' ? 'Venta completada' : 'Confirmar venta'}
+            {step === 'success' ? '¡Venta completada!' : 'Confirmar venta'}
           </h2>
-          {step !== 'loading' && <button onClick={onClose} className="text-zinc-500 hover:text-white transition"><X size={16} /></button>}
+          {step === 'confirm' && (
+            <button onClick={onClose} className="text-zinc-500 hover:text-white transition"><X size={16} /></button>
+          )}
+          {step === 'success' && (
+            <button onClick={onNewSale} className="text-zinc-500 hover:text-white transition text-xs">Cerrar</button>
+          )}
         </div>
 
+        {/* CONFIRM */}
         {step === 'confirm' && (
           <div className="p-5 flex flex-col gap-4">
             <div className="flex items-center gap-3 bg-zinc-800/60 rounded-xl px-4 py-3">
@@ -191,6 +201,7 @@ export default function CheckoutModal({ clientName, clientEmail, onClose, onSucc
           </div>
         )}
 
+        {/* LOADING */}
         {step === 'loading' && (
           <div className="p-10 flex flex-col items-center gap-4">
             <Loader2 size={32} className="text-amber-500 animate-spin" />
@@ -198,51 +209,63 @@ export default function CheckoutModal({ clientName, clientEmail, onClose, onSucc
           </div>
         )}
 
+        {/* SUCCESS — modal NO se cierra solo, espera acción del usuario */}
         {step === 'success' && snapshot && (
-          <div className="p-6 flex flex-col items-center gap-4 text-center">
-            <div className="w-14 h-14 rounded-full bg-green-500/10 flex items-center justify-center">
-              <CheckCircle size={28} className="text-green-400" />
-            </div>
-            <div>
-              <p className="text-white font-semibold text-base">¡Venta registrada!</p>
-              <p className="text-zinc-400 text-xs mt-1">Cliente: {clientName}</p>
-              <p className="text-zinc-600 text-xs">Orden #{snapshot.orderNumber}</p>
+          <div className="p-6 flex flex-col gap-4">
+
+            {/* Éxito */}
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle size={24} className="text-green-400" />
+              </div>
+              <div>
+                <p className="text-white font-semibold">¡Venta registrada!</p>
+                <p className="text-zinc-400 text-xs">Cliente: {clientName} · Orden #{snapshot.orderNumber}</p>
+              </div>
             </div>
 
-            {/* Email status */}
+            {/* Resumen */}
+            <div className="bg-zinc-800 rounded-xl px-4 py-3 flex flex-col gap-1.5">
+              {snapshot.items.map((item, i) => (
+                <div key={i} className="flex justify-between text-xs">
+                  <span className="text-zinc-400">{item.name} ×{item.quantity}</span>
+                  <span className="text-zinc-300">{fmt(item.price * item.quantity)}</span>
+                </div>
+              ))}
+              <div className="border-t border-zinc-700 mt-1.5 pt-2 flex justify-between items-center">
+                <span className="text-xs text-zinc-500 capitalize">{snapshot.method}</span>
+                <span className="text-lg font-bold text-amber-400">{fmt(snapshot.total)}</span>
+              </div>
+            </div>
+
+            {/* Estado email */}
             {clientEmail && (
-              <div className={`flex items-center gap-2 rounded-xl px-3 py-2 w-full justify-center ${
-                emailSent ? 'bg-green-500/10 border border-green-500/20' :
-                emailSending ? 'bg-zinc-800 border border-zinc-700' :
-                'bg-zinc-800 border border-zinc-700'
+              <div className={`flex items-center gap-2 rounded-xl px-3 py-2.5 border ${
+                emailSent
+                  ? 'bg-green-500/10 border-green-500/20'
+                  : 'bg-zinc-800 border-zinc-700'
               }`}>
                 {emailSending
-                  ? <><Loader2 size={12} className="text-zinc-400 animate-spin" /><span className="text-xs text-zinc-400">Enviando voucher...</span></>
+                  ? <><Loader2 size={13} className="text-zinc-400 animate-spin shrink-0" /><span className="text-xs text-zinc-400">Enviando voucher a {clientEmail}...</span></>
                   : emailSent
-                    ? <><Mail size={12} className="text-green-400" /><span className="text-xs text-green-400">Voucher enviado a {clientEmail}</span></>
-                    : <><Mail size={12} className="text-zinc-500" /><button onClick={() => sendEmail(snapshot, clientEmail)} className="text-xs text-zinc-400 hover:text-amber-400 transition">Reenviar voucher</button></>
+                    ? <><CheckCircle size={13} className="text-green-400 shrink-0" /><span className="text-xs text-green-400">Voucher enviado a {clientEmail}</span></>
+                    : <><Mail size={13} className="text-zinc-500 shrink-0" /><button onClick={() => sendEmail(snapshot, clientEmail)} className="text-xs text-zinc-400 hover:text-amber-400 transition text-left">Enviar voucher a {clientEmail}</button></>
                 }
               </div>
             )}
 
-            <div className="bg-zinc-800 rounded-xl px-4 py-3 w-full">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-xs text-zinc-500">Total cobrado</span>
-                <span className="text-xs text-zinc-500 capitalize">{snapshot.method}</span>
-              </div>
-              <p className="text-2xl font-bold text-amber-400">{fmt(snapshot.total)}</p>
-            </div>
+            {/* Acciones */}
+            <button onClick={handlePrint}
+              className="w-full flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700
+                         border border-zinc-600 text-white font-medium rounded-xl py-3 text-sm transition">
+              <Printer size={15} />
+              Imprimir voucher
+            </button>
 
-            <div className="flex gap-2 w-full">
-              <button onClick={handlePrint}
-                className="flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-200 font-medium rounded-xl py-2.5 text-sm transition">
-                <Printer size={14} />Imprimir
-              </button>
-              <button onClick={onSuccess}
-                className="flex-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-xl py-2.5 text-sm transition active:scale-[0.98]">
-                Nueva venta
-              </button>
-            </div>
+            <button onClick={onNewSale}
+              className="w-full bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-xl py-3 text-sm transition active:scale-[0.98]">
+              Nueva venta
+            </button>
           </div>
         )}
       </div>
