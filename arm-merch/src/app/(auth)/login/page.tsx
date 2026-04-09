@@ -75,7 +75,7 @@ export default function LoginPage() {
         <div className="lb">
           <div className="lbt">
             <div className="lbd" />
-            <span className="lbla">Iglesia ARM · Sistema de Merch</span>
+            <span className="lbla">ARM Global · Sistema de Merch</span>
           </div>
           <h1 className="lh1">ARM <em>Merch</em></h1>
           <p className="lhs">Acceso a la plataforma de merchandising</p>

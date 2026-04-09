@@ -18,7 +18,7 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   title: 'ARM Merch',
-  description: 'Sistema de Merchandising · Iglesia ARM',
+  description: 'Sistema de Merchandising · ARM Global',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
