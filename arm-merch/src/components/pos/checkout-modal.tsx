@@ -22,7 +22,17 @@ export default function CheckoutModal({ clientName, onClose, onSuccess }: Props)
   const [orderNumber, setOrderNumber] = useState<number | null>(null)
   const [error, setError]             = useState('')
 
+  // Guardar totales ANTES de que clearCart() los ponga en 0
+  const [finalTotal, setFinalTotal]   = useState(0)
+  const [finalMethod, setFinalMethod] = useState('')
+
   async function handleConfirm() {
+    // Capturar valores antes de limpiar el carrito
+    const orderTotal   = total()
+    const orderSubtotal = subtotal()
+    const orderMethod  = paymentMethod
+    const orderItems   = [...items]
+
     setStep('loading')
     setError('')
 
@@ -39,10 +49,10 @@ export default function CheckoutModal({ clientName, onClose, onSuccess }: Props)
       .from('orders')
       .insert({
         seller_id:      session.user.id,
-        payment_method: paymentMethod,
-        subtotal:       subtotal(),
+        payment_method: orderMethod,
+        subtotal:       orderSubtotal,
         discount:       discount,
-        total:          total(),
+        total:          orderTotal,
         notes:          `Cliente: ${clientName}`,
         status:         'pendiente',
       })
@@ -56,7 +66,7 @@ export default function CheckoutModal({ clientName, onClose, onSuccess }: Props)
     }
 
     const { error: itemsError } = await supabase.from('order_items').insert(
-      items.map(i => ({
+      orderItems.map(i => ({
         order_id:   order.id,
         product_id: i.product.id,
         quantity:   i.quantity,
@@ -79,9 +89,14 @@ export default function CheckoutModal({ clientName, onClose, onSuccess }: Props)
       return
     }
 
+    // Guardar valores finales para mostrar en la pantalla de éxito
+    setFinalTotal(orderTotal)
+    setFinalMethod(orderMethod)
     setOrderNumber(order.order_number)
-    setStep('success')
+
+    // Limpiar carrito DESPUÉS de guardar los valores
     clearCart()
+    setStep('success')
   }
 
   return (
@@ -177,7 +192,7 @@ export default function CheckoutModal({ clientName, onClose, onSuccess }: Props)
           </div>
         )}
 
-        {/* SUCCESS */}
+        {/* SUCCESS — usa finalTotal y finalMethod, no los del carrito */}
         {step === 'success' && (
           <div className="p-6 flex flex-col items-center gap-4 text-center">
             <div className="w-14 h-14 rounded-full bg-green-500/10 flex items-center justify-center">
@@ -185,12 +200,15 @@ export default function CheckoutModal({ clientName, onClose, onSuccess }: Props)
             </div>
             <div>
               <p className="text-white font-semibold text-base">¡Venta registrada!</p>
-              <p className="text-zinc-500 text-xs mt-1">Cliente: {clientName}</p>
+              <p className="text-zinc-400 text-xs mt-1">Cliente: {clientName}</p>
               {orderNumber && <p className="text-zinc-600 text-xs">Orden #{orderNumber}</p>}
             </div>
-            <div className="bg-zinc-800 rounded-xl px-5 py-3 w-full">
-              <p className="text-xs text-zinc-500 mb-1">Total cobrado</p>
-              <p className="text-xl font-bold text-amber-400">{fmt(total())}</p>
+            <div className="bg-zinc-800 rounded-xl px-5 py-4 w-full flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-500">Total cobrado</span>
+                <span className="text-xs text-zinc-500 capitalize">{finalMethod}</span>
+              </div>
+              <p className="text-2xl font-bold text-amber-400">{fmt(finalTotal)}</p>
             </div>
             <button onClick={onSuccess}
               className="w-full bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-xl py-2.5 text-sm transition active:scale-[0.98]">
