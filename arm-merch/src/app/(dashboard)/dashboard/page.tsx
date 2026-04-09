@@ -1,87 +1,87 @@
 import { createClient } from '@/lib/supabase/server'
-import DashboardClient from './dashboard-client'
 
 export default async function DashboardPage() {
   const supabase = createClient()
-  const today = new Date()
-  const startOfDay   = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString()
 
   const [
-    { data: todayOrdersRaw },
-    { data: monthOrdersRaw },
-    { data: lowStock },
-    { data: topProducts },
-    { data: recentOrders },
+    { data: ordersRaw },
+    { data: lowStockRaw },
+    { data: recentRaw },
   ] = await Promise.all([
-    supabase
-      .from('orders')
-      .select('total, status, created_at')
-      .gte('created_at', startOfDay)
-      .eq('status', 'completada'),
-    supabase
-      .from('orders')
-      .select('total, created_at')
-      .gte('created_at', startOfMonth)
-      .eq('status', 'completada'),
-    supabase
-      .from('products_with_stock')
-      .select('id, name, stock, low_stock_alert')
-      .lte('stock', 5)
-      .gt('stock', 0)
-      .order('stock', { ascending: true })
-      .limit(5),
-    supabase
-      .from('order_items')
-      .select('quantity, unit_price, product:products(name)')
-      .order('quantity', { ascending: false })
-      .limit(5),
-    supabase
-      .from('orders')
-      .select('id, order_number, total, status, payment_method, created_at, seller:profiles(full_name)')
-      .order('created_at', { ascending: false })
-      .limit(8),
+    supabase.from('orders').select('total, status, created_at').eq('status', 'completada'),
+    supabase.from('products_with_stock').select('id, name, stock, low_stock_alert').lte('stock', 5).gt('stock', 0).limit(5),
+    supabase.from('orders').select('id, order_number, total, status, payment_method, created_at, seller:profiles(full_name)').order('created_at', { ascending: false }).limit(8),
   ])
 
-  // Cast explícito para evitar tipo 'never' del inferidor de Supabase
-  type OrderRow = { total: number; created_at: string }
-  const todayOrders  = (todayOrdersRaw  ?? []) as OrderRow[]
-  const monthOrders  = (monthOrdersRaw  ?? []) as OrderRow[]
+  type O = { total: number; created_at: string }
+  const orders     = (ordersRaw ?? []) as O[]
+  const lowStock   = (lowStockRaw ?? []) as any[]
+  const recent     = (recentRaw ?? []) as any[]
 
-  const todayTotal = todayOrders.reduce((s, o) => s + Number(o.total), 0)
-  const todayCount = todayOrders.length
-  const monthTotal = monthOrders.reduce((s, o) => s + Number(o.total), 0)
+  const today      = new Date().toDateString()
+  const todayTotal = orders.filter(o => new Date(o.created_at).toDateString() === today).reduce((s, o) => s + Number(o.total), 0)
+  const monthTotal = orders.reduce((s, o) => s + Number(o.total), 0)
+  const fmt        = (n: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n)
+  const fmtDate    = (d: string) => new Date(d).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 
-  // Ventas por hora para gráfico del día
-  const hourlyMap: Record<number, number> = {}
-  for (let h = 8; h <= 20; h++) hourlyMap[h] = 0
-  todayOrders.forEach(o => {
-    const h = new Date(o.created_at).getHours()
-    if (h in hourlyMap) hourlyMap[h] = (hourlyMap[h] || 0) + Number(o.total)
-  })
-  const hourlyData = Object.entries(hourlyMap).map(([hour, total]) => ({
-    hour: `${hour}:00`,
-    total,
-  }))
-
-  // Ventas por día del mes
-  const dailyMap: Record<string, number> = {}
-  monthOrders.forEach(o => {
-    const d = new Date(o.created_at).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })
-    dailyMap[d] = (dailyMap[d] || 0) + Number(o.total)
-  })
-  const dailyData = Object.entries(dailyMap).map(([day, total]) => ({ day, total }))
+  const STATUS_COLOR: Record<string, string> = {
+    completada: 'text-green-400 bg-green-500/10',
+    pendiente:  'text-amber-400 bg-amber-500/10',
+    cancelada:  'text-red-400 bg-red-500/10',
+  }
 
   return (
-    <DashboardClient
-      todayTotal={todayTotal}
-      todayCount={todayCount}
-      monthTotal={monthTotal}
-      lowStock={lowStock ?? []}
-      topProducts={topProducts ?? []}
-      recentOrders={recentOrders ?? []}
-      hourlyData={hourlyData}
-      dailyData={dailyData}
-    />
+    <div className="flex flex-col gap-5">
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label: 'Ventas hoy',     value: fmt(todayTotal),         color: 'text-amber-400' },
+          { label: 'Órdenes hoy',    value: orders.filter(o => new Date(o.created_at).toDateString() === today).length.toString(), color: 'text-blue-400' },
+          { label: 'Ventas del mes', value: fmt(monthTotal),          color: 'text-green-400' },
+          { label: 'Stock bajo',     value: lowStock.length.toString(), color: 'text-orange-400' },
+        ].map(s => (
+          <div key={s.label} className="bg-zinc-800/50 border border-zinc-700/40 rounded-xl p-4">
+            <p className="text-xs text-zinc-500">{s.label}</p>
+            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Stock bajo */}
+        <div className="bg-zinc-800/30 border border-zinc-700/40 rounded-xl p-4">
+          <p className="text-sm font-medium text-white mb-3">Stock bajo</p>
+          {lowStock.length === 0
+            ? <p className="text-zinc-600 text-xs py-4 text-center">Todo el stock normal</p>
+            : lowStock.map((p: any) => (
+              <div key={p.id} className="flex items-center justify-between py-1.5">
+                <span className="text-xs text-zinc-300 truncate flex-1">{p.name}</span>
+                <span className="text-xs font-bold text-orange-400 ml-2">{p.stock} uds.</span>
+              </div>
+            ))
+          }
+        </div>
+
+        {/* Órdenes recientes */}
+        <div className="lg:col-span-2 bg-zinc-800/30 border border-zinc-700/40 rounded-xl p-4">
+          <p className="text-sm font-medium text-white mb-3">Órdenes recientes</p>
+          {recent.length === 0
+            ? <p className="text-zinc-600 text-xs py-4 text-center">Sin órdenes</p>
+            : recent.map((o: any) => (
+              <div key={o.id} className="flex items-center gap-3 py-1.5 border-b border-zinc-700/30 last:border-0">
+                <span className="text-xs text-zinc-600 font-mono w-10">#{o.order_number}</span>
+                <span className="text-xs text-zinc-400 flex-1 truncate">{o.seller?.full_name ?? '—'}</span>
+                <span className="text-xs text-zinc-500 hidden sm:block">{fmtDate(o.created_at)}</span>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${STATUS_COLOR[o.status] ?? ''}`}>
+                  {o.status}
+                </span>
+                <span className="text-xs font-bold text-amber-400 min-w-[70px] text-right">{fmt(o.total)}</span>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import './login.css'
 
@@ -9,37 +9,54 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
-  const [msg, setMsg]           = useState('')
+  const [ok, setOk]             = useState(false)
+
+  // Cuando ok=true, redirigir con múltiples métodos
+  useEffect(() => {
+    if (!ok) return
+    const t1 = setTimeout(() => { window.location.href = '/dashboard' }, 100)
+    const t2 = setTimeout(() => { window.location.replace('/dashboard') }, 600)
+    const t3 = setTimeout(() => { document.location.href = '/dashboard' }, 1200)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+  }, [ok])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    setMsg('')
 
     const supabase = createClient()
-
     const { data, error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     })
 
     if (authError) {
-      setError('Error: ' + authError.message)
+      setError(authError.message)
       setLoading(false)
       return
     }
 
     if (data.session) {
-      setMsg('Sesión OK — redirigiendo...')
-      setTimeout(() => {
-        window.location.href = '/dashboard'
-      }, 800)
+      setOk(true)
       return
     }
 
-    setError('Sin sesión. Verifica en Supabase que el usuario esté confirmado.')
+    setError('No se obtuvo sesión.')
     setLoading(false)
+  }
+
+  if (ok) {
+    return (
+      <div style={{ minHeight:'100vh', background:'#080808', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:16 }}>
+        <div style={{ width:40, height:40, border:'3px solid #f59e0b', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+        <p style={{ color:'#f59e0b', fontFamily:'sans-serif', fontSize:14 }}>Cargando plataforma...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        <a href="/dashboard" style={{ color:'rgba(255,255,255,0.3)', fontSize:12, fontFamily:'sans-serif', marginTop:8 }}>
+          Si no redirige, click aquí
+        </a>
+      </div>
+    )
   }
 
   return (
@@ -67,29 +84,16 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="lform">
           <div className="lfi">
             <label className="lfl">Correo electrónico</label>
-            <input
-              type="email" value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="tu@iglesia.cl" required
-              autoComplete="email" className="lfx"
-            />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="tu@iglesia.cl" required autoComplete="email" className="lfx" />
           </div>
           <div className="lfi">
             <label className="lfl">Contraseña</label>
-            <input
-              type="password" value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="••••••••" required
-              autoComplete="current-password" className="lfx"
-            />
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••" required autoComplete="current-password" className="lfx" />
           </div>
           <div className="ldv" />
           {error && <div className="ler">{error}</div>}
-          {msg && (
-            <div style={{fontSize:12,color:'#4ade80',background:'rgba(74,222,128,0.08)',border:'1px solid rgba(74,222,128,0.2)',borderRadius:4,padding:'10px 14px'}}>
-              {msg}
-            </div>
-          )}
           <button type="submit" disabled={loading} className="lbtn">
             {loading && <span className="lsp" />}
             {loading ? 'Verificando...' : 'Ingresar'}
@@ -102,7 +106,6 @@ export default function LoginPage() {
           <div className="lfline" />
         </div>
       </div>
-
       <div className="lr-yr">ARM © 2025</div>
     </div>
   )
