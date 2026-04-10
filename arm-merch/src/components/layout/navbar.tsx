@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Bell, LogOut, Search, X, Sun, Moon } from 'lucide-react'
+import { LogOut, Search, X } from 'lucide-react'
 
 const CAMPUS_COLORS: Record<string, string> = {
   'ARM Santiago':    'bg-blue-500/10 text-blue-400',
@@ -91,17 +91,6 @@ export default function Navbar({ user }: { user: any }) {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Toggle tema */}
-          <button onClick={toggleTheme}
-            className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition text-zinc-400 hover:text-white">
-            {dark ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
-
-          {/* Notificaciones */}
-          <button className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition text-zinc-400 hover:text-white">
-            <Bell size={15} />
-          </button>
-
           {/* Usuario */}
           <div className="flex items-center gap-2.5">
             <div className="text-right hidden sm:block">
