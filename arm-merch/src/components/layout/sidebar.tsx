@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ShoppingCart, Package, BarChart3,
   Users, ClipboardList, ArrowLeftRight, Receipt,
-  ArrowRightLeft, User, Calculator, TrendingDown
+  ArrowRightLeft, User, Calculator, TrendingDown, MapPin
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -27,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Reportes',       href: '/reports',             icon: <BarChart3 size={16}/>,       roles: ['admin','super_admin'] },
   { label: 'Cierre de caja', href: '/close-day',           icon: <Calculator size={16}/>,      roles: ['admin','super_admin'] },
   { label: 'Usuarios',       href: '/settings/users',      icon: <Users size={16}/>,           roles: ['super_admin'], section:'Configuración' },
+  { label: 'Campus',         href: '/settings/campus',     icon: <MapPin size={16}/>,          roles: ['super_admin'] },
   { label: 'Mi perfil',      href: '/profile',             icon: <User size={16}/>,            roles: ['voluntario','admin','super_admin'], section:'Mi cuenta' },
 ]
 
