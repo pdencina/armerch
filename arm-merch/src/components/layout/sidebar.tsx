@@ -37,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
 export default function Sidebar({ role }: { role: Role }) {
   const pathname = usePathname()
   const visible  = NAV_ITEMS.filter(i => i.roles.includes(role))
-  const sections = [...new Set(visible.map(i => i.section ?? ''))]
+  const sections = Array.from(new Set(visible.map(i => i.section ?? '')))
 
   return (
     <aside className="w-52 flex flex-col bg-zinc-950 border-r border-zinc-800/60 py-5 px-2.5 shrink-0 overflow-y-auto">
