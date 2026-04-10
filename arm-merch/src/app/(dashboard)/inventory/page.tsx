@@ -12,8 +12,24 @@ export default function InventoryPage() {
   useEffect(() => {
     const supabase = createClient()
     async function load() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const { data: profile } = await supabase
+        .from('profiles').select('role, campus_id').eq('id', session.user.id).single()
+
+      const role     = profile?.role ?? 'voluntario'
+      const campusId = profile?.campus_id ?? null
+
+      let query = supabase.from('products_with_stock').select('*').order('name')
+
+      // Admin de campus ve solo su campus
+      if (role !== 'super_admin' && campusId) {
+        query = query.eq('campus_id', campusId)
+      }
+
       const [{ data: p }, { data: c }] = await Promise.all([
-        supabase.from('products_with_stock').select('*').order('name'),
+        query,
         supabase.from('categories').select('id, name').eq('active', true).order('name'),
       ])
       setProducts(p ?? [])

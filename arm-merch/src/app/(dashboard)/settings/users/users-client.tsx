@@ -1,5 +1,6 @@
 'use client'
 
+import { toast } from 'sonner'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Search, Plus, X, Loader2, UserPlus, Mail } from 'lucide-react'
@@ -84,7 +85,7 @@ export default function UsersClient({ initialUsers }: { initialUsers: any[] }) {
       return
     }
 
-    setSuccess(`✓ Usuario ${newEmail.trim()} creado exitosamente`)
+    toast.success(`✓ Usuario ${newEmail.trim()} creado exitosamente`)
     resetForm()
     reloadUsers()
   }
