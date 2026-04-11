@@ -40,7 +40,12 @@ export default function InventoryClient({ initialProducts, categories, userRole,
   useEffect(() => {
     const channel = supabase
       .channel('inventory-realtime')
-      .on('postgres_changes', { event:'*', schema:'public', table:'inventory' }, async () => {
+      .on('postgres_changes', { event:'*', schema:'public', table:'inventory' }, async (payload: any) => {
+        // Solo recargar si el cambio es del campus del usuario
+        const changedCampusId = payload?.new?.campus_id ?? payload?.old?.campus_id
+        if (!isSuperAdmin && userCampusId && changedCampusId !== userCampusId) {
+          return // Ignorar cambios de otros campus
+        }
         let query = supabase.from('products_with_stock').select('*').order('name')
         if (!isSuperAdmin && userCampusId) query = query.eq('campus_id', userCampusId)
         const { data } = await query
@@ -143,8 +148,11 @@ export default function InventoryClient({ initialProducts, categories, userRole,
           onClose={() => setMovProd(null)}
           onSuccess={async () => {
             setMovProd(null)
+            // Recargar solo el campus del usuario
             let query = supabase.from('products_with_stock').select('*').order('name')
-            if (!isSuperAdmin && userCampusId) query = query.eq('campus_id', userCampusId)
+            if (!isSuperAdmin && userCampusId) {
+              query = query.eq('campus_id', userCampusId)
+            }
             const { data } = await query
             if (data) setProducts(data)
           }}
