@@ -17,7 +17,8 @@ import {
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 }).format(n)
 
-const fmtK = (n: number) => n >= 1000000
+const fmtK = (n: number) => fmt(n) // Siempre mostrar monto completo en CLP
+const fmtAxis = (n: number) => n >= 1000000
   ? `$${(n/1000000).toFixed(1)}M`
   : n >= 1000 ? `$${(n/1000).toFixed(0)}K` : fmt(n)
 
@@ -474,7 +475,7 @@ export default function DashboardPage() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                   <XAxis dataKey="month" tick={{ fill:'#52525b', fontSize:11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill:'#52525b', fontSize:10 }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
+                  <YAxis tick={{ fill:'#52525b', fontSize:10 }} axisLine={false} tickLine={false} tickFormatter={v => fmtAxis(v)} />
                   <Tooltip content={<CustomTooltip />} />
                   <Area type="monotone" dataKey="total" stroke="#f59e0b" strokeWidth={2} fill="url(#areaGrad)" dot={{ fill:'#f59e0b', r:4, strokeWidth:0 }} activeDot={{ r:6 }} />
                 </AreaChart>
