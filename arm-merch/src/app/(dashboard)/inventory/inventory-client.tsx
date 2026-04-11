@@ -13,9 +13,10 @@ interface Props {
   userRole?: string
   userCampusId?: string | null
   userCampusName?: string | null
+  onReload?: () => void
 }
 
-export default function InventoryClient({ initialProducts, categories, userRole, userCampusId, userCampusName }: Props) {
+export default function InventoryClient({ initialProducts, categories, userRole, userCampusId, userCampusName, onReload }: Props) {
   const [products, setProducts]       = useState<any[]>(initialProducts)
   const [campus, setCampus]           = useState<any[]>([])
   const [search, setSearch]           = useState('')
@@ -36,24 +37,20 @@ export default function InventoryClient({ initialProducts, categories, userRole,
     }
   }, [isSuperAdmin])
 
-  // Realtime
+  // Realtime — solo escuchar cambios del campus propio
   useEffect(() => {
     const channel = supabase
-      .channel('inventory-realtime')
+      .channel(`inventory-${userCampusId ?? 'global'}`)
       .on('postgres_changes', { event:'*', schema:'public', table:'inventory' }, async (payload: any) => {
-        // Solo recargar si el cambio es del campus del usuario
         const changedCampusId = payload?.new?.campus_id ?? payload?.old?.campus_id
-        if (!isSuperAdmin && userCampusId && changedCampusId !== userCampusId) {
-          return // Ignorar cambios de otros campus
-        }
-        let query = supabase.from('products_with_stock').select('*').order('name')
-        if (!isSuperAdmin && userCampusId) query = query.eq('campus_id', userCampusId)
-        const { data } = await query
-        if (data) setProducts(data)
+        // Ignorar cambios de otros campus
+        if (!isSuperAdmin && userCampusId && changedCampusId !== userCampusId) return
+        // Recargar usando la función del padre que ya filtra correctamente
+        if (onReload) onReload()
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [isSuperAdmin, userCampusId])
+  }, [isSuperAdmin, userCampusId, onReload])
 
   const filtered = products.filter(p => {
     const matchSearch  = !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku ?? '').toLowerCase().includes(search.toLowerCase())
@@ -146,15 +143,9 @@ export default function InventoryClient({ initialProducts, categories, userRole,
           userCampusId={userCampusId ?? null}
           isSuperAdmin={isSuperAdmin}
           onClose={() => setMovProd(null)}
-          onSuccess={async () => {
+          onSuccess={() => {
             setMovProd(null)
-            // Recargar solo el campus del usuario
-            let query = supabase.from('products_with_stock').select('*').order('name')
-            if (!isSuperAdmin && userCampusId) {
-              query = query.eq('campus_id', userCampusId)
-            }
-            const { data } = await query
-            if (data) setProducts(data)
+            if (onReload) onReload()
           }}
         />
       )}

@@ -37,12 +37,21 @@ export default function MovementForm({ product, campus, onClose, onSuccess, user
     ? (product.campus_id ?? userCampusId ?? null)
     : userCampusId ?? null
 
-  // Cargar stock real directamente desde inventory con el ID del registro
+  // Usar inventory_id del product si viene del nuevo cargador, si no buscarlo
   useEffect(() => {
     async function loadStock() {
       setLoadingStock(true)
-      const supabase = createClient()
       
+      // Si el product ya tiene inventory_id (nuevo sistema), usarlo directamente
+      if (product.inventory_id) {
+        setCurrentStock(product.stock ?? 0)
+        setInventoryId(product.inventory_id)
+        setLoadingStock(false)
+        return
+      }
+
+      // Fallback: buscar por product_id + campus_id
+      const supabase = createClient()
       let query = supabase.from('inventory')
         .select('id, stock')
         .eq('product_id', product.id)
@@ -53,21 +62,20 @@ export default function MovementForm({ product, campus, onClose, onSuccess, user
         query = query.is('campus_id', null)
       }
 
-      const { data, error } = await query.single()
+      const { data, error } = await query.maybeSingle()
       
       if (error || !data) {
-        console.error('Error cargando stock:', error)
         setCurrentStock(0)
         setInventoryId(null)
       } else {
         setCurrentStock(data.stock ?? 0)
-        setInventoryId(data.id) // Guardar el ID exacto del registro
+        setInventoryId(data.id)
       }
       setLoadingStock(false)
     }
     
     if (product.id) loadStock()
-  }, [product.id, targetCampusId])
+  }, [product.id, product.inventory_id, targetCampusId])
 
   const qty     = parseInt(quantity) || 0
   const preview = type === 'entrada' ? currentStock + qty : currentStock - qty
