@@ -32,7 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   // Inventario — admin y super_admin
   { label: 'Inventario',     href: '/inventory',           icon: <Package size={16}/>,         roles: ['admin','super_admin'], section:'Inventario' },
   { label: 'Movimientos',    href: '/inventory/movements', icon: <ArrowLeftRight size={16}/>,  roles: ['admin','super_admin'] },
-  { label: 'Transferencias', href: '/transfers',           icon: <ArrowRightLeft size={16}/>,  roles: ['admin','super_admin'] },
+  { label: 'Transferencias', href: '/transfers',           icon: <ArrowRightLeft size={16}/>,  roles: ['super_admin'] },
 
   // Gestión campus — admin y super_admin
   { label: 'Productos',      href: '/products',            icon: <ClipboardList size={16}/>,   roles: ['admin','super_admin'], section:'Gestión' },

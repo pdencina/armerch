@@ -17,7 +17,24 @@ export default function CloseDayPage() {
   const [data, setData]     = useState<any>(null)
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => { loadData(date) }, [date])
+  const [campusId, setCampusId]   = useState<string|null>(null)
+  const [campusName, setCampusName] = useState<string|null>(null)
+  const [userRole, setUserRole]   = useState('')
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+      supabase.from('profiles').select('role, campus_id, campus:campus(name)').eq('id', session.user.id).single()
+        .then(({ data: p }) => {
+          setUserRole(p?.role ?? '')
+          setCampusId(p?.campus_id ?? null)
+          setCampusName((p?.campus as any)?.name ?? null)
+        })
+    })
+  }, [])
+
+  useEffect(() => { if (userRole) loadData(date) }, [date, userRole, campusId])
 
   async function loadData(d: string) {
     setLoading(true)

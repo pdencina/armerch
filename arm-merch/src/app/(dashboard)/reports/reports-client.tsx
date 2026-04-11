@@ -8,6 +8,7 @@ interface Props {
   orders: any[]
   products: any[]
   sellers: any[]
+  campusName?: string | null
 }
 
 const fmt = (n: number) =>
@@ -16,7 +17,7 @@ const fmt = (n: number) =>
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' })
 
-export default function ReportsClient({ orders, products, sellers }: Props) {
+export default function ReportsClient({ orders, products, sellers, campusName }: Props) {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo]     = useState('')
   const [sellerId, setSellerId] = useState('')
