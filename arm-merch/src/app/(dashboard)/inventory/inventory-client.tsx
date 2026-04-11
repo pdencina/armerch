@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { Search, MapPin } from 'lucide-react'
+import { useState } from 'react'
+import { Search, MapPin, RefreshCw } from 'lucide-react'
 import ProductTable from '@/components/inventory/product-table'
 import MovementForm from '@/components/inventory/movement-form'
 import LowStockAlert from '@/components/inventory/low-stock-alert'
@@ -17,47 +16,20 @@ interface Props {
 }
 
 export default function InventoryClient({ initialProducts, categories, userRole, userCampusId, userCampusName, onReload }: Props) {
-  const [products, setProducts]       = useState<any[]>(initialProducts)
-  const [campus, setCampus]           = useState<any[]>([])
-  const [search, setSearch]           = useState('')
+  const [products, setProducts]        = useState<any[]>(initialProducts)
+  const [search, setSearch]            = useState('')
   const [filterCategory, setFilterCat] = useState('')
-  const [filterCampus, setFilterCampus] = useState(
-    // Admin ve solo su campus por defecto — no puede cambiarlo
-    userRole !== 'super_admin' && userCampusId ? userCampusId : ''
-  )
-  const [filterStock, setFilterStock] = useState<'all'|'low'|'out'>('all')
-  const [movementProduct, setMovProd] = useState<any|null>(null)
-  const supabase = createClient()
+  const [filterStock, setFilterStock]  = useState<'all'|'low'|'out'>('all')
+  const [movementProduct, setMovProd]  = useState<any|null>(null)
+  const [refreshing, setRefreshing]    = useState(false)
+
   const isSuperAdmin = userRole === 'super_admin'
-
-  useEffect(() => {
-    if (isSuperAdmin) {
-      supabase.from('campus').select('id, name').eq('active', true).order('name')
-        .then(({ data }) => setCampus(data ?? []))
-    }
-  }, [isSuperAdmin])
-
-  // Realtime — solo escuchar cambios del campus propio
-  useEffect(() => {
-    const channel = supabase
-      .channel(`inventory-${userCampusId ?? 'global'}`)
-      .on('postgres_changes', { event:'*', schema:'public', table:'inventory' }, async (payload: any) => {
-        const changedCampusId = payload?.new?.campus_id ?? payload?.old?.campus_id
-        // Ignorar cambios de otros campus
-        if (!isSuperAdmin && userCampusId && changedCampusId !== userCampusId) return
-        // Recargar usando la función del padre que ya filtra correctamente
-        if (onReload) onReload()
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [isSuperAdmin, userCampusId, onReload])
 
   const filtered = products.filter(p => {
     const matchSearch  = !search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku ?? '').toLowerCase().includes(search.toLowerCase())
     const matchCat     = !filterCategory || p.category_id === filterCategory
-    const matchCampus  = !filterCampus || p.campus_id === filterCampus
     const matchStock   = filterStock === 'all' ? true : filterStock === 'out' ? (p.stock ?? 0) === 0 : (p.stock ?? 0) > 0 && (p.stock ?? 0) <= (p.low_stock_alert ?? 5)
-    return matchSearch && matchCat && matchCampus && matchStock
+    return matchSearch && matchCat && matchStock
   })
 
   const lowStock  = products.filter(p => (p.stock ?? 0) > 0 && (p.stock ?? 0) <= (p.low_stock_alert ?? 5))
@@ -65,9 +37,15 @@ export default function InventoryClient({ initialProducts, categories, userRole,
   const totalVal  = products.reduce((s, p) => s + p.price * (p.stock ?? 0), 0)
   const fmt = (n: number) => new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 }).format(n)
 
+  async function handleRefresh() {
+    if (!onReload) return
+    setRefreshing(true)
+    await onReload()
+    setRefreshing(false)
+  }
+
   return (
     <div className="flex flex-col gap-5">
-      {/* Header con campus del admin */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-lg font-semibold text-white">Inventario</h1>
@@ -81,9 +59,12 @@ export default function InventoryClient({ initialProducts, categories, userRole,
             <p className="text-xs text-zinc-500 mt-0.5">Gestión de stock global</p>
           )}
         </div>
+        <button onClick={handleRefresh} disabled={refreshing}
+          className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition text-zinc-400 disabled:opacity-50">
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+        </button>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label:'Total productos',  value:products.length.toString(), color:'text-white' },
@@ -102,7 +83,6 @@ export default function InventoryClient({ initialProducts, categories, userRole,
         <LowStockAlert lowStock={lowStock} outOfStock={outStock} onAdjust={p => setMovProd(p)} />
       )}
 
-      {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
         <div className="relative flex-1 min-w-48">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
@@ -116,16 +96,6 @@ export default function InventoryClient({ initialProducts, categories, userRole,
           <option value="">Todas las categorías</option>
           {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-
-        {/* Filtro campus — SOLO Super Admin */}
-        {isSuperAdmin && (
-          <select value={filterCampus} onChange={e => setFilterCampus(e.target.value)}
-            className="bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition">
-            <option value="">Todos los campus</option>
-            {campus.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        )}
-
         <select value={filterStock} onChange={e => setFilterStock(e.target.value as any)}
           className="bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition">
           <option value="all">Todo el stock</option>
@@ -134,18 +104,22 @@ export default function InventoryClient({ initialProducts, categories, userRole,
         </select>
       </div>
 
-      <ProductTable products={filtered} campus={isSuperAdmin ? campus : []} onMovement={p => setMovProd(p)} />
+      <ProductTable products={filtered} campus={[]} onMovement={p => setMovProd(p)} />
 
       {movementProduct && (
         <MovementForm
           product={movementProduct}
-          campus={isSuperAdmin ? campus : []}
-          userCampusId={userCampusId ?? null}
+          campus={[]}
+          userCampusId={userCampusId}
           isSuperAdmin={isSuperAdmin}
           onClose={() => setMovProd(null)}
-          onSuccess={() => {
+          onSuccess={async () => {
             setMovProd(null)
-            if (onReload) onReload()
+            if (onReload) {
+              setRefreshing(true)
+              await onReload()
+              setRefreshing(false)
+            }
           }}
         />
       )}
