@@ -58,9 +58,29 @@ export default function MovementForm({ product, campus, onClose, onSuccess, user
     if (movError) { toast.error(movError.message); setLoading(false); return }
 
     const newStock = type === 'entrada' ? currentStock + qty : currentStock - qty
-    const { error: invError } = await supabase.from('inventory')
-      .update({ stock: newStock, updated_by: session.user.id, updated_at: new Date().toISOString(), ...(campusId ? { campus_id: campusId } : {}) })
-      .eq('product_id', product.id)
+
+    // Actualizar el registro correcto según product_id + campus_id
+    let invError = null
+    if (campusId) {
+      // Upsert: actualizar si existe, crear si no existe para este campus
+      const { error } = await supabase.from('inventory')
+        .upsert({
+          product_id: product.id,
+          campus_id: campusId,
+          stock: newStock,
+          updated_by: session.user.id,
+          updated_at: new Date().toISOString(),
+          low_stock_alert: product.low_stock_alert ?? 5,
+        }, { onConflict: 'product_id,campus_id' })
+      invError = error
+    } else {
+      // Sin campus: actualizar la fila sin campus_id
+      const { error } = await supabase.from('inventory')
+        .update({ stock: newStock, updated_by: session.user.id, updated_at: new Date().toISOString() })
+        .eq('product_id', product.id)
+        .is('campus_id', null)
+      invError = error
+    }
 
     if (invError) { toast.error(invError.message); setLoading(false); return }
 
