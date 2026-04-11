@@ -49,8 +49,8 @@ function buildEmailHtml(d: VoucherPayload): string {
 
     <!-- Header -->
     <tr><td style="background:#18181b;border-radius:16px 16px 0 0;padding:32px;text-align:center">
-      <div style="display:inline-block;background:#f59e0b;border-radius:12px;padding:8px 20px;margin-bottom:16px">
-        <span style="font-size:18px;font-weight:900;color:#000;letter-spacing:-0.5px">ARM MERCH</span>
+      <div style="margin-bottom:16px">
+        <span style="font-size:13px;font-weight:600;color:#a1a1aa;letter-spacing:0.05em;text-transform:uppercase">ARM GLOBAL</span>
       </div>
       <div style="font-size:28px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;margin-bottom:4px">
         Comprobante de compra
@@ -67,11 +67,6 @@ function buildEmailHtml(d: VoucherPayload): string {
           <td style="padding:16px 20px">
             <table cellpadding="0" cellspacing="0">
               <tr>
-                <td style="vertical-align:middle;padding-right:14px">
-                  <div style="width:44px;height:44px;border-radius:50%;background:#f59e0b;display:flex;align-items:center;justify-content:center;text-align:center;line-height:44px">
-                    <span style="font-size:16px;font-weight:700;color:#000">${initials}</span>
-                  </div>
-                </td>
                 <td style="vertical-align:middle">
                   <div style="font-size:16px;font-weight:600;color:#1a1a1a">${d.clientName}</div>
                   <div style="font-size:12px;color:#888;margin-top:2px">${d.date}</div>
@@ -131,9 +126,8 @@ function buildEmailHtml(d: VoucherPayload): string {
       <!-- Mensaje -->
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;margin-bottom:8px">
         <tr><td style="padding:20px;text-align:center">
-          <div style="font-size:20px;margin-bottom:8px">🙏</div>
           <div style="font-size:15px;font-weight:600;color:#92400e;margin-bottom:4px">¡Gracias por tu compra!</div>
-          <div style="font-size:13px;color:#a16207">Que Dios bendiga tu vida</div>
+          <div style="font-size:13px;color:#a16207">Si tienes alguna consulta, responde este correo.</div>
         </td></tr>
       </table>
 
@@ -172,7 +166,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await resend.emails.send({
       from:    `ARM Merch <${fromEmail}>`,
       to:      [body.to],
-      subject: `Tu comprobante de compra — Orden #${body.orderNumber}`,
+      subject: `Comprobante de compra ARM Merch — Orden #${body.orderNumber}`,
       html:    buildEmailHtml(body),
     })
 
