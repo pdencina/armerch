@@ -72,8 +72,9 @@ export default function DashboardPage() {
     // Voluntarios solo ven sus propias ventas
     let query = supabase.from('orders').select('total, status, created_at, order_number, payment_method, seller_id')
       .eq('status', 'completada').gte('created_at', start).lt('created_at', end)
-    if (userRole === 'voluntario' && session.user.id) {
-      query = query.eq('seller_id', session.user.id)
+    const { data: { session: currentSession } } = await supabase.auth.getSession()
+    if (userRole === 'voluntario' && currentSession?.user?.id) {
+      query = query.eq('seller_id', currentSession.user.id)
     }
 
     const [{ data: dayOrders }, { data: lowStock }, { data: recent }] = await Promise.all([
