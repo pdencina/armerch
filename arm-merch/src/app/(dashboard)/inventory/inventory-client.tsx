@@ -138,6 +138,8 @@ export default function InventoryClient({ initialProducts, categories, userRole,
         <MovementForm
           product={movementProduct}
           campus={isSuperAdmin ? campus : []}
+          userCampusId={userCampusId ?? null}
+          isSuperAdmin={isSuperAdmin}
           onClose={() => setMovProd(null)}
           onSuccess={async () => {
             setMovProd(null)

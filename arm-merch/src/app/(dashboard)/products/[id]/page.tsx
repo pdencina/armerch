@@ -9,17 +9,31 @@ export default function EditProductPage() {
   const { id } = useParams()
   const [product, setProduct]       = useState<any>(null)
   const [categories, setCategories] = useState<any[]>([])
+  const [error, setError]           = useState('')
 
   useEffect(() => {
     const supabase = createClient()
     Promise.all([
-      supabase.from('products_with_stock').select('*').eq('id', id as string).single(),
+      supabase.from('products').select(`
+        id, name, description, price, sku, active, image_url, category_id,
+        inventory(stock, low_stock_alert, campus_id)
+      `).eq('id', id as string).single(),
       supabase.from('categories').select('id, name').eq('active', true).order('name'),
-    ]).then(([{ data: p }, { data: c }]) => {
-      setProduct(p)
+    ]).then(([{ data: p, error: pErr }, { data: c }]) => {
+      if (pErr) { setError(pErr.message); return }
+      const withStock = p ? {
+        ...p,
+        stock: (p as any).inventory?.[0]?.stock ?? 0,
+        low_stock_alert: (p as any).inventory?.[0]?.low_stock_alert ?? 5,
+      } : null
+      setProduct(withStock)
       setCategories(c ?? [])
     })
   }, [id])
+
+  if (error) return (
+    <div className="bg-red-950/40 border border-red-900 rounded-xl p-4 text-red-400 text-sm">{error}</div>
+  )
 
   if (!product) return (
     <div className="flex items-center justify-center h-48">

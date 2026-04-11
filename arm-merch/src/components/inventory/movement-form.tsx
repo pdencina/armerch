@@ -10,6 +10,8 @@ interface Props {
   campus: { id: string; name: string }[]
   onClose: () => void
   onSuccess: () => void
+  userCampusId?: string | null
+  isSuperAdmin?: boolean
 }
 
 type MovType = 'entrada' | 'salida' | 'ajuste'
@@ -20,11 +22,11 @@ const TYPES = [
   { value: 'ajuste'  as MovType, label: 'Ajuste',  icon: RefreshCw,    color: 'text-blue-400 border-blue-500/40 bg-blue-500/10'    },
 ]
 
-export default function MovementForm({ product, campus, onClose, onSuccess }: Props) {
+export default function MovementForm({ product, campus, onClose, onSuccess, userCampusId, isSuperAdmin }: Props) {
   const [type, setType]         = useState<MovType>('entrada')
   const [quantity, setQuantity] = useState('')
   const [notes, setNotes]       = useState('')
-  const [campusId, setCampusId] = useState(product.campus_id ?? '')
+  const [campusId, setCampusId] = useState(userCampusId ?? product.campus_id ?? '')
   const [loading, setLoading]   = useState(false)
 
   const currentStock = product.stock ?? 0
@@ -86,12 +88,16 @@ export default function MovementForm({ product, campus, onClose, onSuccess }: Pr
           </div>
 
           <div>
-            <label className="block text-xs text-zinc-500 mb-1.5">Asignar a campus</label>
-            <select value={campusId} onChange={e => setCampusId(e.target.value)}
-              className="w-full bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition">
-              <option value="">Sin campus (inventario general)</option>
-              {campus.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            {isSuperAdmin ? (
+            <>
+              <label className="block text-xs text-zinc-500 mb-1.5">Asignar a campus</label>
+              <select value={campusId} onChange={e => setCampusId(e.target.value)}
+                className="w-full bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition">
+                <option value="">Sin campus (inventario general)</option>
+                {campus.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </>
+          ) : null}
           </div>
 
           <div>

@@ -40,22 +40,33 @@ export default function Navbar({ user }: { user: any }) {
     document.documentElement.classList.toggle('light-mode', !isDark)
   }, [])
 
-  // Cargar notificaciones reales (stock bajo, sin stock)
+  // Cargar notificaciones reales — filtradas por campus del usuario
   useEffect(() => {
     async function loadNotifs() {
       const supabase = createClient()
-      const { data: lowStock } = await supabase
-        .from('products_with_stock')
-        .select('id, name, stock, low_stock_alert, campus_name')
-        .lte('stock', 5)
-        .gt('stock', 0)
-        .limit(5)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
 
-      const { data: outStock } = await supabase
-        .from('products_with_stock')
-        .select('id, name, stock, campus_name')
-        .eq('stock', 0)
-        .limit(5)
+      // Obtener campus del usuario para filtrar notificaciones
+      const campusId = user?.campus_id ?? null
+      const role     = user?.role ?? 'voluntario'
+
+      let lowStockQuery = supabase.from('products_with_stock')
+        .select('id, name, stock, low_stock_alert, campus_name, campus_id')
+        .lte('stock', 5).gt('stock', 0).limit(5)
+
+      let outStockQuery = supabase.from('products_with_stock')
+        .select('id, name, stock, campus_name, campus_id')
+        .eq('stock', 0).limit(5)
+
+      // Admin y voluntario solo ven alertas de su campus
+      if (role !== 'super_admin' && campusId) {
+        lowStockQuery = lowStockQuery.eq('campus_id', campusId)
+        outStockQuery = outStockQuery.eq('campus_id', campusId)
+      }
+
+      const { data: lowStock } = await lowStockQuery
+      const { data: outStock } = await outStockQuery
 
       const list: Notification[] = []
       ;(outStock ?? []).forEach(p => list.push({
