@@ -113,15 +113,13 @@ export default function InventoryClient({ initialProducts, categories, userRole,
           userCampusId={userCampusId}
           isSuperAdmin={isSuperAdmin}
           onClose={() => setMovProd(null)}
-          onSuccess={(newStock?: number) => {
-            // Actualizar estado local directamente sin recargar la BD
-            if (newStock !== undefined && movementProduct) {
-              setProducts(prev => prev.map(p =>
-                p.inventory_id === movementProduct.inventory_id
-                  ? { ...p, stock: newStock, low_stock: newStock <= (p.low_stock_alert ?? 5) }
-                  : p
-              ))
-            }
+          onSuccess={(newStock: number) => {
+            // Actualizar directamente en el estado local — sin recargar BD
+            setProducts(prev => prev.map(p =>
+              p.inventory_id === movementProduct?.inventory_id
+                ? { ...p, stock: newStock, low_stock: newStock <= (p.low_stock_alert ?? 5) }
+                : p
+            ))
             setMovProd(null)
           }}
         />
