@@ -1,5 +1,5 @@
 # ARM Merch 🛍️
-Sistema de Merchandising · Iglesia ARM
+Sistema de Merchandising · Iglesia ARM 2026
 
 ## Stack
 - **Frontend**: Next.js 14 (App Router) + TypeScript + Tailwind CSS
