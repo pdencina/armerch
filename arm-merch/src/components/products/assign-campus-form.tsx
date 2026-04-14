@@ -10,7 +10,11 @@ interface Props {
   campuses: { id: string; name: string }[]
 }
 
-export default function AssignCampusForm({ productId, productName, campuses }: Props) {
+export default function AssignCampusForm({
+  productId,
+  productName,
+  campuses,
+}: Props) {
   const supabase = createClient()
 
   const [campusId, setCampusId] = useState('')
@@ -29,10 +33,23 @@ export default function AssignCampusForm({ productId, productName, campuses }: P
     setLoading(true)
 
     try {
-      // 👇 IMPORTANTE: NO VALIDAMOS SESSION AQUÍ
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      if (sessionError || !session?.access_token) {
+        toast.error('No autenticado')
+        setLoading(false)
+        return
+      }
+
       const res = await fetch('/api/inventory/assign', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           product_id: productId,
           campus_id: campusId,
@@ -50,10 +67,7 @@ export default function AssignCampusForm({ productId, productName, campuses }: P
       }
 
       toast.success('Producto asignado al campus')
-
-      // 🔥 refrescar pantalla
       window.location.reload()
-
     } catch (err) {
       toast.error('Error inesperado')
     }
@@ -67,15 +81,16 @@ export default function AssignCampusForm({ productId, productName, campuses }: P
         Agregar producto a otro campus
       </h2>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <p className="mb-4 text-xs text-zinc-500">{productName}</p>
 
+      <form onSubmit={handleSubmit} className="space-y-4">
         <select
           value={campusId}
           onChange={(e) => setCampusId(e.target.value)}
-          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm text-white"
+          className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-white"
         >
           <option value="">Seleccionar campus</option>
-          {campuses.map(c => (
+          {campuses.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
@@ -88,7 +103,7 @@ export default function AssignCampusForm({ productId, productName, campuses }: P
             placeholder="Stock inicial"
             value={stock}
             onChange={(e) => setStock(e.target.value)}
-            className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm text-white"
+            className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-white"
           />
 
           <input
@@ -96,14 +111,14 @@ export default function AssignCampusForm({ productId, productName, campuses }: P
             placeholder="Stock bajo"
             value={lowStock}
             onChange={(e) => setLowStock(e.target.value)}
-            className="bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm text-white"
+            className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-white"
           />
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-xl py-2 transition disabled:opacity-50"
+          className="w-full rounded-xl bg-amber-500 py-2 font-semibold text-black transition hover:bg-amber-400 disabled:opacity-50"
         >
           {loading ? 'Asignando...' : 'Asignar a campus'}
         </button>
