@@ -1,82 +1,34 @@
-'use client'
+async function handleSubmit(e: React.FormEvent) {
+  e.preventDefault()
+  setLoading(true)
+  setError('')
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import './login.css'
+  console.log('🔵 Intentando login...')
 
-export default function LoginPage() {
-  const router = useRouter()
+  const supabase = createClient()
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password,
+  })
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+  console.log('🟡 Resultado login:', { data, error })
 
-    const supabase = createClient()
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    })
-
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-      return
-    }
-
-    if (!data.session) {
-      setError('No se pudo iniciar sesión')
-      setLoading(false)
-      return
-    }
-
-    // 🔥 CLAVE: refrescar router (SSR sync)
-    router.refresh()
-
-    // 🔥 CLAVE: navegación Next (no window.location)
-    router.replace('/dashboard')
+  if (error) {
+    console.error('🔴 Error login:', error)
+    setError(error.message)
+    setLoading(false)
+    return
   }
 
-  return (
-    <div className="lr">
-      <div className="lr-grid" />
+  if (!data.session) {
+    console.error('🔴 No hay sesión')
+    setError('No se pudo iniciar sesión')
+    setLoading(false)
+    return
+  }
 
-      <div className="lc">
-        <h1 className="lh1">ARM Merch</h1>
+  console.log('🟢 Login OK, redirigiendo...')
 
-        <form onSubmit={handleSubmit} className="lform">
-          <input
-            type="email"
-            placeholder="Correo"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            className="lfx"
-          />
-
-          <input
-            type="password"
-            placeholder="Contraseña"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className="lfx"
-          />
-
-          {error && <div className="ler">{error}</div>}
-
-          <button type="submit" disabled={loading} className="lbtn">
-            {loading ? 'Ingresando...' : 'Ingresar'}
-          </button>
-        </form>
-      </div>
-    </div>
-  )
+  window.location.href = '/dashboard'
 }
