@@ -18,7 +18,7 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             })
           } catch {
-            // Puede fallar en algunos contextos SSR; es esperable
+            // esperado en algunos contextos SSR
           }
         },
       },
