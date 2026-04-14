@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { upsertProductWithInventory } from '@/lib/actions/products'
 
 type Category = {
   id: string
@@ -89,37 +88,77 @@ export default function ProductForm() {
     loadFormData()
   }, [supabase])
 
-  const handleSubmit = async () => {
-    setLoading(true)
-
-    const payload = {
-      product: {
-        name,
-        price: Number(price),
-        sku,
-        category_id: categoryId,
-        active: true,
-      },
-      campusStocks: campusStocks
-        .filter((c) => c.enabled)
-        .map((c) => ({
-          campus_id: c.campus_id,
-          stock: Number(c.stock),
-          low_stock_alert: Number(c.low_stock_alert),
-        })),
-    }
-
-    const result = await upsertProductWithInventory(payload)
-
-    setLoading(false)
-
-    if ('error' in result) {
-      alert(result.error)
+  async function handleSubmit() {
+    if (!name.trim()) {
+      alert('El nombre es obligatorio')
       return
     }
 
-    alert('Producto creado correctamente')
-    window.location.href = '/products'
+    if (Number(price) < 0) {
+      alert('El precio no puede ser negativo')
+      return
+    }
+
+    const selectedCampuses = campusStocks
+      .filter((c) => c.enabled)
+      .map((c) => ({
+        campus_id: c.campus_id,
+        stock: Number(c.stock),
+        low_stock_alert: Number(c.low_stock_alert),
+      }))
+
+    if (selectedCampuses.length === 0) {
+      alert('Debes seleccionar al menos un campus')
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      if (sessionError || !session?.access_token) {
+        alert('No autenticado')
+        setLoading(false)
+        return
+      }
+
+      const res = await fetch('/api/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          product: {
+            name: name.trim(),
+            price: Number(price),
+            sku: sku.trim() || null,
+            category_id: categoryId || null,
+            active: true,
+          },
+          campusStocks: selectedCampuses,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.error ?? 'No se pudo crear el producto')
+        setLoading(false)
+        return
+      }
+
+      alert('Producto creado correctamente')
+      window.location.href = '/products'
+    } catch (err: any) {
+      alert(err?.message ?? 'Error inesperado al crear el producto')
+    }
+
+    setLoading(false)
   }
 
   if (loadingData) {
