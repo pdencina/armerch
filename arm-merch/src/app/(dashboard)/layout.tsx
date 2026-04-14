@@ -43,9 +43,10 @@ export default async function DashboardLayout({
     )
   }
 
-  const campusName = Array.isArray(profile.campus)
-    ? profile.campus[0]?.name
-    : profile.campus?.name
+  const campusRaw = (profile as any).campus
+  const campusName = Array.isArray(campusRaw)
+    ? campusRaw[0]?.name
+    : campusRaw?.name
 
   return (
     <div className="flex h-screen overflow-hidden bg-zinc-950">
