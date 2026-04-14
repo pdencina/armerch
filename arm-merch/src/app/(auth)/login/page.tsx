@@ -13,39 +13,44 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleLogin() {
     setLoading(true)
     setError('')
 
-    console.log('🔵 Intentando login...')
+    try {
+      console.log('LOGIN_START')
 
-    const supabase = createClient()
+      const supabase = createClient()
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    })
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      })
 
-    console.log('🟡 Resultado login:', { data, error })
+      console.log('LOGIN_RESULT', { data, error })
 
-    if (error) {
-      console.error('🔴 Error login:', error)
-      setError(error.message)
+      if (error) {
+        setError(error.message)
+        setLoading(false)
+        return
+      }
+
+      if (!data.session) {
+        setError('No se pudo iniciar sesión')
+        setLoading(false)
+        return
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession()
+      console.log('SESSION_AFTER_LOGIN', sessionData)
+
+      router.refresh()
+      router.replace('/dashboard')
+    } catch (err: any) {
+      console.error('LOGIN_CATCH', err)
+      setError(err?.message ?? 'Error inesperado al iniciar sesión')
       setLoading(false)
-      return
     }
-
-    if (!data.session) {
-      console.error('🔴 No hay sesión')
-      setError('No se pudo iniciar sesión')
-      setLoading(false)
-      return
-    }
-
-    console.log('🟢 Login OK, redirigiendo...')
-    router.refresh()
-    router.replace('/dashboard')
   }
 
   return (
@@ -72,7 +77,7 @@ export default function LoginPage() {
           <p className="lhs">Acceso a la plataforma de merchandising</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="lform">
+        <div className="lform">
           <div className="lfi">
             <label className="lfl">Correo electrónico</label>
             <input
@@ -96,6 +101,12 @@ export default function LoginPage() {
               required
               autoComplete="current-password"
               className="lfx"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleLogin()
+                }
+              }}
             />
           </div>
 
@@ -103,11 +114,16 @@ export default function LoginPage() {
 
           {error && <div className="ler">{error}</div>}
 
-          <button type="submit" disabled={loading} className="lbtn">
+          <button
+            type="button"
+            onClick={handleLogin}
+            disabled={loading}
+            className="lbtn"
+          >
             {loading && <span className="lsp" />}
             {loading ? 'Verificando...' : 'Ingresar'}
           </button>
-        </form>
+        </div>
 
         <div className="lfooter">
           <div className="lfline" />
