@@ -1,13 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import './login.css'
 
 export default function LoginPage() {
-  const router = useRouter()
-
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -19,7 +16,6 @@ export default function LoginPage() {
     setError('')
 
     const supabase = createClient()
-
     const { data, error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
@@ -31,14 +27,13 @@ export default function LoginPage() {
       return
     }
 
-    if (!data.session) {
-      setError('No se obtuvo sesión.')
-      setLoading(false)
+    if (data.session) {
+      window.location.href = '/dashboard'
       return
     }
 
-    router.refresh()
-    router.replace('/dashboard')
+    setError('No se obtuvo sesión.')
+    setLoading(false)
   }
 
   return (
