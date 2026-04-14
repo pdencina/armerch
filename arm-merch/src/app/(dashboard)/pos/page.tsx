@@ -34,9 +34,10 @@ export default function POSPage() {
 
       // Voluntario y Admin → solo productos de su campus
       // Super Admin → ve todos (puede vender de cualquier campus)
-      if (role !== 'super_admin' && campusId) {
-        query = query.eq('campus_id', campusId)
-      }
+      if (campusId) {query = query.eq('campus_id', campusId)
+	  } else {
+		query = query.eq('campus_id', '__none__')
+	}
 
       const [{ data: p }, { data: c }] = await Promise.all([
         query,

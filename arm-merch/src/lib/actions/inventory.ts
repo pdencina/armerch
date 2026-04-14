@@ -2,59 +2,127 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { getCurrentProfile } from '@/lib/auth/get-current-profile'
 
 interface MovementInput {
   product_id: string
   type: 'entrada' | 'salida' | 'ajuste'
   quantity: number
   notes?: string
-  campus_id?: string
 }
 
 export async function registerMovement(input: MovementInput) {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'No autenticado' }
 
-  if (input.type !== 'entrada') {
-    const { data: invRaw } = await supabase
-      .from('inventory').select('stock').eq('product_id', input.product_id).single()
-    const inv = invRaw as { stock: number } | null
-    if (!inv || (inv.stock - input.quantity) < 0) {
-      return { error: 'Stock insuficiente para este movimiento' }
-    }
+  const profileResult = await getCurrentProfile()
+  if ('error' in profileResult) {
+    return { error: profileResult.error }
   }
 
-  const { error } = await supabase.from('inventory_movements').insert({
-    product_id: input.product_id,
-    type:       input.type,
-    quantity:   input.quantity,
-    notes:      input.notes ?? null,
-    created_by: user.id,
-  })
+  const profile = profileResult.data
 
-  if (error) return { error: error.message }
+  if (!profile.campus_id && profile.role !== 'super_admin') {
+    return { error: 'Usuario sin campus asignado' }
+  }
 
-  // Actualizar campus_id en inventory si se especificó
-  if (input.campus_id) {
-    await supabase.from('inventory')
-      .update({ campus_id: input.campus_id, updated_by: user.id })
-      .eq('product_id', input.product_id)
+  const campusId = profile.campus_id
+  if (!campusId) {
+    return { error: 'Campus no resuelto' }
+  }
+
+  const { data: inventoryRow, error: inventoryError } = await supabase
+    .from('inventory')
+    .select('id, stock, low_stock_alert')
+    .eq('product_id', input.product_id)
+    .eq('campus_id', campusId)
+    .single()
+
+  if (inventoryError || !inventoryRow) {
+    return { error: 'Inventario no encontrado para este campus' }
+  }
+
+  let newStock = inventoryRow.stock
+
+  if (input.type === 'entrada') newStock += input.quantity
+  if (input.type === 'salida') newStock -= input.quantity
+  if (input.type === 'ajuste') newStock = input.quantity
+
+  if (newStock < 0) {
+    return { error: 'Stock insuficiente para este movimiento' }
+  }
+
+  const { error: updateError } = await supabase
+    .from('inventory')
+    .update({
+      stock: newStock,
+      updated_by: profile.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', inventoryRow.id)
+
+  if (updateError) {
+    return { error: updateError.message }
+  }
+
+  const movementQuantity =
+    input.type === 'ajuste'
+      ? Math.abs(newStock - inventoryRow.stock)
+      : input.quantity
+
+  const { error: movementError } = await supabase
+    .from('inventory_movements')
+    .insert({
+      product_id: input.product_id,
+      campus_id: campusId,
+      type: input.type,
+      quantity: movementQuantity,
+      notes: input.notes ?? null,
+      created_by: profile.id,
+    })
+
+  if (movementError) {
+    return { error: movementError.message }
   }
 
   revalidatePath('/inventory')
   revalidatePath('/dashboard')
+
   return { success: true }
 }
 
 export async function getMovements(productId?: string) {
   const supabase = createClient()
+
+  const profileResult = await getCurrentProfile()
+  if ('error' in profileResult) {
+    return { error: profileResult.error, data: [] }
+  }
+
+  const profile = profileResult.data
+
   let query = supabase
     .from('inventory_movements')
-    .select(`*, product:products(name, sku), created_by_profile:profiles(full_name)`)
-    .order('created_at', { ascending: false }).limit(100)
-  if (productId) query = query.eq('product_id', productId)
+    .select(`
+      *,
+      product:products(name, sku),
+      created_by_profile:profiles(full_name)
+    `)
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  if (productId) {
+    query = query.eq('product_id', productId)
+  }
+
+  if (profile.role !== 'super_admin' && profile.campus_id) {
+    query = query.eq('campus_id', profile.campus_id)
+  }
+
   const { data, error } = await query
-  if (error) return { error: error.message, data: [] }
+
+  if (error) {
+    return { error: error.message, data: [] }
+  }
+
   return { data: (data ?? []) as any[] }
 }
