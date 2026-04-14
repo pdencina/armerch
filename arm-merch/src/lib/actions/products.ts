@@ -166,3 +166,87 @@ export async function upsertProductWithInventory(
     productId,
   }
 }
+
+export async function assignProductToCampus(input: {
+  product_id: string
+  campus_id: string
+  stock: number
+  low_stock_alert?: number
+}) {
+  const supabase = await createClient()
+
+  const profileResult = await getCurrentProfile()
+  if ('error' in profileResult) {
+    return { error: profileResult.error }
+  }
+
+  const profile = profileResult.data
+
+  if (profile.role !== 'super_admin') {
+    return { error: 'Solo el super admin puede asignar productos a otros campus' }
+  }
+
+  if (!input.product_id || !input.campus_id) {
+    return { error: 'Producto o campus inválido' }
+  }
+
+  const stock = Number(input.stock)
+  const lowStockAlert = Number(input.low_stock_alert ?? 5)
+
+  if (stock < 0) {
+    return { error: 'El stock no puede ser negativo' }
+  }
+
+  const { data: existingInventory, error: existingError } = await supabase
+    .from('inventory')
+    .select('id')
+    .eq('product_id', input.product_id)
+    .eq('campus_id', input.campus_id)
+    .maybeSingle()
+
+  if (existingError) {
+    return { error: existingError.message }
+  }
+
+  if (existingInventory) {
+    return { error: 'Este producto ya existe en el campus seleccionado' }
+  }
+
+  const { error: inventoryError } = await supabase
+    .from('inventory')
+    .insert({
+      product_id: input.product_id,
+      campus_id: input.campus_id,
+      stock,
+      low_stock_alert: lowStockAlert,
+      updated_by: profile.id,
+      updated_at: new Date().toISOString(),
+    })
+
+  if (inventoryError) {
+    return { error: inventoryError.message }
+  }
+
+  if (stock > 0) {
+    const { error: movementError } = await supabase
+      .from('inventory_movements')
+      .insert({
+        product_id: input.product_id,
+        campus_id: input.campus_id,
+        type: 'entrada',
+        quantity: stock,
+        notes: 'Asignación inicial de producto a campus',
+        created_by: profile.id,
+      })
+
+    if (movementError) {
+      return { error: movementError.message }
+    }
+  }
+
+  revalidatePath('/products')
+  revalidatePath('/inventory')
+  revalidatePath('/dashboard')
+
+  return { success: true }
+}
