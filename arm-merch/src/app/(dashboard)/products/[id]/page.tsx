@@ -14,6 +14,7 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<any>(null)
   const [campuses, setCampuses] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<string>('')
 
   useEffect(() => {
     async function load() {
@@ -25,6 +26,31 @@ export default function ProductDetailPage() {
           setLoading(false)
           return
         }
+
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession()
+
+        if (sessionError || !session) {
+          setError('No hay sesión activa')
+          setLoading(false)
+          return
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single()
+
+        if (profileError || !profile) {
+          setError(profileError?.message ?? 'No se pudo cargar el perfil')
+          setLoading(false)
+          return
+        }
+
+        setUserRole(profile.role ?? '')
 
         const { data: productData, error: productError } = await supabase
           .from('products')
@@ -108,6 +134,7 @@ export default function ProductDetailPage() {
   }
 
   const inventoryRows = Array.isArray(product.inventory) ? product.inventory : []
+  const isSuperAdmin = userRole === 'super_admin'
 
   return (
     <div className="space-y-6">
@@ -165,7 +192,7 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className={`grid gap-6 ${isSuperAdmin ? 'lg:grid-cols-2' : 'lg:grid-cols-1'}`}>
         <div className="rounded-2xl border border-zinc-700/60 bg-zinc-900/50 p-5">
           <h2 className="mb-4 text-sm font-semibold text-white">
             Inventario actual por campus
@@ -215,11 +242,13 @@ export default function ProductDetailPage() {
           )}
         </div>
 
-        <AssignCampusForm
-          productId={product.id}
-          productName={product.name}
-          campuses={campuses}
-        />
+        {isSuperAdmin && (
+          <AssignCampusForm
+            productId={product.id}
+            productName={product.name}
+            campuses={campuses}
+          />
+        )}
       </div>
     </div>
   )
