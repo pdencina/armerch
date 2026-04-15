@@ -43,20 +43,72 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Campus no encontrado' }, { status: 400 })
     }
 
-    const { data, error } = await adminClient
+    const campusId = profile.campus_id
+
+    const { data: openSession, error: openError } = await adminClient
       .from('cash_sessions')
       .select('*')
-      .eq('campus_id', profile.campus_id)
+      .eq('campus_id', campusId)
       .eq('status', 'open')
       .order('opened_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+    if (openError) {
+      return NextResponse.json({ error: openError.message }, { status: 400 })
     }
 
-    return NextResponse.json({ session: data ?? null })
+    const { data: history, error: historyError } = await adminClient
+      .from('cash_sessions')
+      .select('*')
+      .eq('campus_id', campusId)
+      .order('opened_at', { ascending: false })
+      .limit(20)
+
+    if (historyError) {
+      return NextResponse.json({ error: historyError.message }, { status: 400 })
+    }
+
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+
+    const { data: todayOrders, error: todayOrdersError } = await adminClient
+      .from('orders')
+      .select('id, total, created_at, payment_method')
+      .eq('campus_id', campusId)
+      .gte('created_at', todayStart.toISOString())
+
+    if (todayOrdersError) {
+      return NextResponse.json({ error: todayOrdersError.message }, { status: 400 })
+    }
+
+    const todaySalesTotal = (todayOrders ?? []).reduce(
+      (sum: number, order: any) => sum + Number(order.total ?? 0),
+      0
+    )
+
+    const todayOrdersCount = (todayOrders ?? []).length
+
+    const paymentSummaryMap = new Map<string, number>()
+    for (const order of todayOrders ?? []) {
+      const method = order.payment_method || 'Sin definir'
+      paymentSummaryMap.set(method, (paymentSummaryMap.get(method) || 0) + Number(order.total ?? 0))
+    }
+
+    const paymentSummary = Array.from(paymentSummaryMap.entries()).map(([method, total]) => ({
+      method,
+      total,
+    }))
+
+    return NextResponse.json({
+      session: openSession ?? null,
+      history: history ?? [],
+      daily_summary: {
+        sales_total: todaySalesTotal,
+        orders_count: todayOrdersCount,
+        payment_summary: paymentSummary,
+      },
+    })
   } catch (error: any) {
     return NextResponse.json(
       { error: error?.message ?? 'Error interno' },
