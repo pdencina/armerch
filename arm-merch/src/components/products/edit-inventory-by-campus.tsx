@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import ConfirmActionModal from '@/components/ui/confirm-action-modal'
 
 type InventoryRow = {
   id: string
@@ -42,8 +43,11 @@ export default function EditInventoryByCampus({
     }))
   )
 
-  async function handleSave(rowIndex: number) {
+  const [confirmRowIndex, setConfirmRowIndex] = useState<number | null>(null)
+
+  async function handleSaveConfirmed(rowIndex: number) {
     const row = formRows[rowIndex]
+    setConfirmRowIndex(null)
 
     const newStock = Number(row.stock_input)
     const newLowStock = Number(row.low_stock_alert_input)
@@ -135,97 +139,113 @@ export default function EditInventoryByCampus({
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-700/60 bg-zinc-900/50 p-5">
-      <div className="mb-5">
-        <h2 className="text-lg font-semibold text-white">
-          Editar inventario por campus
-        </h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          Ajusta stock y alerta sin salir de esta pantalla.
-        </p>
+    <>
+      <div className="rounded-2xl border border-zinc-700/60 bg-zinc-900/50 p-5">
+        <div className="mb-5">
+          <h2 className="text-lg font-semibold text-white">
+            Editar inventario por campus
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Ajusta stock y alerta sin salir de esta pantalla.
+          </p>
+        </div>
+
+        {formRows.length === 0 ? (
+          <p className="text-sm text-zinc-500">
+            No hay inventario disponible para editar.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {formRows.map((row, index) => (
+              <div
+                key={row.id}
+                className="rounded-2xl border border-zinc-800 bg-zinc-950/50 p-4"
+              >
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      {row.campus_name}
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Stock actual guardado: {row.stock}
+                    </p>
+                  </div>
+
+                  <span className="rounded-lg bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
+                    Campus
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-zinc-400">
+                      Stock
+                    </label>
+                    <input
+                      type="number"
+                      value={row.stock_input}
+                      onChange={(e) => {
+                        const value = Number(e.target.value)
+                        setFormRows((prev) =>
+                          prev.map((item, i) =>
+                            i === index ? { ...item, stock_input: value } : item
+                          )
+                        )
+                      }}
+                      className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-sm text-black placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-zinc-400">
+                      Alerta stock bajo
+                    </label>
+                    <input
+                      type="number"
+                      value={row.low_stock_alert_input}
+                      onChange={(e) => {
+                        const value = Number(e.target.value)
+                        setFormRows((prev) =>
+                          prev.map((item, i) =>
+                            i === index
+                              ? { ...item, low_stock_alert_input: value }
+                              : item
+                          )
+                        )
+                      }}
+                      className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-sm text-black placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button
+                    onClick={() => setConfirmRowIndex(index)}
+                    disabled={row.saving}
+                    className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-60"
+                  >
+                    {row.saving ? 'Guardando...' : 'Guardar inventario'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {formRows.length === 0 ? (
-        <p className="text-sm text-zinc-500">
-          No hay inventario disponible para editar.
-        </p>
-      ) : (
-        <div className="space-y-4">
-          {formRows.map((row, index) => (
-            <div
-              key={row.id}
-              className="rounded-2xl border border-zinc-800 bg-zinc-950/50 p-4"
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-white">
-                    {row.campus_name}
-                  </p>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    Stock actual guardado: {row.stock}
-                  </p>
-                </div>
-
-                <span className="rounded-lg bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
-                  Campus
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-zinc-400">
-                    Stock
-                  </label>
-                  <input
-                    type="number"
-                    value={row.stock_input}
-                    onChange={(e) => {
-                      const value = Number(e.target.value)
-                      setFormRows((prev) =>
-                        prev.map((item, i) =>
-                          i === index ? { ...item, stock_input: value } : item
-                        )
-                      )
-                    }}
-                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-sm text-black placeholder-zinc-500 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-zinc-400">
-                    Alerta stock bajo
-                  </label>
-                  <input
-                    type="number"
-                    value={row.low_stock_alert_input}
-                    onChange={(e) => {
-                      const value = Number(e.target.value)
-                      setFormRows((prev) =>
-                        prev.map((item, i) =>
-                          i === index
-                            ? { ...item, low_stock_alert_input: value }
-                            : item
-                        )
-                      )
-                    }}
-                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-sm text-black placeholder-zinc-500 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-4">
-                <button
-                  onClick={() => handleSave(index)}
-                  disabled={row.saving}
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-60"
-                >
-                  {row.saving ? 'Guardando...' : 'Guardar inventario'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+      {confirmRowIndex !== null && (
+        <ConfirmActionModal
+          open={true}
+          title="¿Confirmar cambio de inventario?"
+          description="Se actualizará el stock de este campus y se registrará automáticamente un movimiento de inventario."
+          confirmText="Sí, actualizar inventario"
+          cancelText="Cancelar"
+          loading={formRows[confirmRowIndex]?.saving}
+          tone="warning"
+          onCancel={() => setConfirmRowIndex(null)}
+          onConfirm={() => handleSaveConfirmed(confirmRowIndex)}
+        />
       )}
-    </div>
+    </>
   )
 }

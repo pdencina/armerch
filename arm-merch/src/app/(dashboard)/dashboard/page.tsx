@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { Clock3, CalendarDays, TrendingUp, BarChart3 } from 'lucide-react'
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('es-CL', {
@@ -28,6 +29,29 @@ function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
+function formatLongDate(value: Date) {
+  return value.toLocaleDateString('es-CL', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+function formatTime(value: Date) {
+  return value.toLocaleTimeString('es-CL', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function getGreeting(date: Date) {
+  const hour = date.getHours()
+  if (hour < 12) return 'Buenos días'
+  if (hour < 20) return 'Buenas tardes'
+  return 'Buenas noches'
+}
+
 const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 const WEEKDAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
@@ -41,12 +65,20 @@ export default function DashboardPage() {
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
   const [role, setRole] = useState<string>('')
   const [orders, setOrders] = useState<any[]>([])
   const [inventory, setInventory] = useState<any[]>([])
   const [orderItems, setOrderItems] = useState<any[]>([])
   const [campuses, setCampuses] = useState<CampusRow[]>([])
+  const [now, setNow] = useState(new Date())
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNow(new Date())
+    }, 1000 * 30)
+
+    return () => window.clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     async function loadDashboard() {
@@ -197,7 +229,7 @@ export default function DashboardPage() {
   }, [campuses])
 
   const metrics = useMemo(() => {
-    const now = new Date()
+    const nowDate = new Date()
     const todayStart = startOfTodayLocal()
     const monthStart = startOfMonthLocal()
 
@@ -227,7 +259,7 @@ export default function DashboardPage() {
 
     const last6Months: { label: string; total: number }[] = []
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const d = new Date(nowDate.getFullYear(), nowDate.getMonth() - i, 1)
       const key = monthKey(d)
       const total = orders
         .filter((o) => monthKey(new Date(o.created_at)) === key)
@@ -346,11 +378,43 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-white">Dashboard</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          {role === 'super_admin' ? 'Vista global de todos los campus' : 'Vista de tu campus'}
-        </p>
+      <div className="rounded-2xl border border-zinc-800 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-zinc-400">
+              <TrendingUp size={16} />
+              <span className="text-sm">{getGreeting(now)}</span>
+            </div>
+
+            <h1 className="mt-2 text-3xl font-bold text-white">Dashboard</h1>
+
+            <p className="mt-2 text-sm text-zinc-500">
+              {role === 'super_admin' ? 'Vista global de todos los campus' : 'Vista de tu campus'}
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-4 py-3">
+              <div className="flex items-center gap-2 text-zinc-500">
+                <CalendarDays size={14} />
+                <span className="text-xs uppercase tracking-wide">Fecha local</span>
+              </div>
+              <p className="mt-1 text-sm font-medium text-white capitalize">
+                {formatLongDate(now)}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-4 py-3">
+              <div className="flex items-center gap-2 text-zinc-500">
+                <Clock3 size={14} />
+                <span className="text-xs uppercase tracking-wide">Hora local</span>
+              </div>
+              <p className="mt-1 text-sm font-medium text-white">
+                {formatTime(now)}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -397,7 +461,10 @@ export default function DashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
         <div className="rounded-2xl border border-zinc-700/60 bg-zinc-900/50 p-5">
-          <h2 className="text-lg font-semibold text-white">Tendencia de ventas</h2>
+          <div className="flex items-center gap-2">
+            <BarChart3 size={18} className="text-amber-400" />
+            <h2 className="text-lg font-semibold text-white">Tendencia de ventas</h2>
+          </div>
           <p className="mt-1 text-sm text-zinc-500">Últimos 6 meses</p>
 
           <div className="mt-6 flex h-64 items-end gap-4">
