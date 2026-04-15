@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import ConfirmActionModal from '@/components/ui/confirm-action-modal'
+import { toast } from 'sonner'
 
 type InventoryRow = {
   id: string
@@ -53,12 +54,12 @@ export default function EditInventoryByCampus({
     const newLowStock = Number(row.low_stock_alert_input)
 
     if (newStock < 0) {
-      alert('El stock no puede ser negativo')
+      toast.error('El stock no puede ser negativo')
       return
     }
 
     if (newLowStock < 0) {
-      alert('La alerta no puede ser negativa')
+      toast.error('La alerta no puede ser negativa')
       return
     }
 
@@ -75,7 +76,7 @@ export default function EditInventoryByCampus({
       } = await supabase.auth.getSession()
 
       if (sessionError || !session?.access_token) {
-        alert('No autenticado')
+        toast.error('No autenticado')
         setFormRows((prev) =>
           prev.map((item, index) =>
             index === rowIndex ? { ...item, saving: false } : item
@@ -103,7 +104,7 @@ export default function EditInventoryByCampus({
       const data = await res.json()
 
       if (!res.ok) {
-        alert(data.error ?? 'No se pudo actualizar inventario')
+        toast.error(data.error ?? 'No se pudo actualizar inventario')
         setFormRows((prev) =>
           prev.map((item, index) =>
             index === rowIndex ? { ...item, saving: false } : item
@@ -112,7 +113,7 @@ export default function EditInventoryByCampus({
         return
       }
 
-      alert('Inventario actualizado correctamente')
+      toast.success('Inventario actualizado correctamente')
 
       setFormRows((prev) =>
         prev.map((item, index) =>
@@ -129,7 +130,7 @@ export default function EditInventoryByCampus({
         )
       )
     } catch (error: any) {
-      alert(error?.message ?? 'Error inesperado al actualizar inventario')
+      toast.error(error?.message ?? 'Error inesperado al actualizar inventario')
       setFormRows((prev) =>
         prev.map((item, index) =>
           index === rowIndex ? { ...item, saving: false } : item

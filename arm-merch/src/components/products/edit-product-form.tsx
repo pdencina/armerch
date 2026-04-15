@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import ConfirmActionModal from '@/components/ui/confirm-action-modal'
+import { toast } from 'sonner'
 
 type Category = {
   id: string
@@ -98,12 +99,12 @@ export default function EditProductForm({ product, categories }: Props) {
     setConfirmOpen(false)
 
     if (!name.trim()) {
-      alert('El nombre es obligatorio')
+      toast.error('El nombre es obligatorio')
       return
     }
 
     if (Number(price) < 0) {
-      alert('El precio no puede ser negativo')
+      toast.error('El precio no puede ser negativo')
       return
     }
 
@@ -116,7 +117,7 @@ export default function EditProductForm({ product, categories }: Props) {
       } = await supabase.auth.getSession()
 
       if (sessionError || !session?.access_token) {
-        alert('No autenticado')
+        toast.error('No autenticado')
         setLoading(false)
         return
       }
@@ -147,15 +148,15 @@ export default function EditProductForm({ product, categories }: Props) {
       const data = await res.json()
 
       if (!res.ok) {
-        alert(data.error ?? 'No se pudo actualizar el producto')
+        toast.error(data.error ?? 'No se pudo actualizar el producto')
         setLoading(false)
         return
       }
 
-      alert('Producto actualizado correctamente')
+      toast.success('Producto actualizado correctamente')
       window.location.reload()
     } catch (error: any) {
-      alert(error?.message ?? 'Error inesperado al actualizar el producto')
+      toast.error(error?.message ?? 'Error inesperado al actualizar el producto')
     }
 
     setLoading(false)
