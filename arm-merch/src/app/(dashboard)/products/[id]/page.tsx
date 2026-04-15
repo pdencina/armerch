@@ -23,6 +23,7 @@ export default function ProductDetailPage() {
   const [campuses, setCampuses] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string>('')
+  const [userCampusId, setUserCampusId] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -48,7 +49,7 @@ export default function ProductDetailPage() {
 
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, campus_id')
           .eq('id', session.user.id)
           .single()
 
@@ -59,6 +60,7 @@ export default function ProductDetailPage() {
         }
 
         setUserRole(profile.role ?? '')
+        setUserCampusId(profile.campus_id ?? null)
 
         const { data: productData, error: productError } = await supabase
           .from('products')
@@ -90,6 +92,20 @@ export default function ProductDetailPage() {
 
         if (productError || !productData) {
           setError(productError?.message ?? 'No se pudo cargar el producto')
+          setLoading(false)
+          return
+        }
+
+        const inventoryRows = Array.isArray((productData as any).inventory)
+          ? (productData as any).inventory
+          : []
+
+        if (
+          profile.role === 'admin' &&
+          profile.campus_id &&
+          !inventoryRows.some((row: any) => row.campus_id === profile.campus_id)
+        ) {
+          setError('No tienes acceso a este producto porque no pertenece a tu campus')
           setLoading(false)
           return
         }
@@ -146,7 +162,12 @@ export default function ProductDetailPage() {
     )
   }
 
-  const inventoryRows = Array.isArray(product.inventory) ? product.inventory : []
+  let inventoryRows = Array.isArray(product.inventory) ? product.inventory : []
+
+  if (userRole === 'admin' && userCampusId) {
+    inventoryRows = inventoryRows.filter((row: any) => row.campus_id === userCampusId)
+  }
+
   const isSuperAdmin = userRole === 'super_admin'
 
   return (

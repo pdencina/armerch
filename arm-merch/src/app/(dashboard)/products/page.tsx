@@ -1,242 +1,300 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { Plus, Edit2, Check, X, Search, Package, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase/client'
+import { Plus, Search } from 'lucide-react'
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 }).format(n)
+type ProductRow = {
+  id: string
+  name: string
+  sku: string | null
+  price: number
+  active: boolean
+  image_url: string | null
+  category_name: string
+  stock: number
+}
 
 export default function ProductsPage() {
-  const [products, setProducts]     = useState<any[]>([])
-  const [categories, setCategories] = useState<any[]>([])
-  const [userRole, setUserRole]     = useState('')
-  const [loading, setLoading]       = useState(true)
-  const [search, setSearch]         = useState('')
-  const [catFilter, setCatFilter]   = useState('')
+  const supabase = createClient()
 
-  // Edición inline
-  const [editId, setEditId]         = useState<string | null>(null)
-  const [editField, setEditField]   = useState<string>('')
-  const [editVal, setEditVal]       = useState<string>('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [products, setProducts] = useState<ProductRow[]>([])
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
 
-  useEffect(() => { loadAll() }, [])
+  useEffect(() => {
+    async function loadProducts() {
+      setLoading(true)
+      setError(null)
 
-  async function loadAll() {
-    setLoading(true)
-    const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
 
-    const [{ data: p }, { data: c }, { data: profile }] = await Promise.all([
-      // Traer TODOS los productos sin filtrar por campus
-      supabase.from('products').select(`
-        id, name, description, price, sku, active, image_url, category_id,
-        inventory(stock, low_stock_alert, campus_id)
-      `).eq('active', true).order('name'),
-      supabase.from('categories').select('id, name').eq('active', true).order('name'),
-      session ? supabase.from('profiles').select('role').eq('id', session.user.id).single() : Promise.resolve({ data: null }),
-    ])
+      if (sessionError || !session) {
+        setError('No autenticado')
+        setLoading(false)
+        return
+      }
 
-    // Aplanar el stock del primer inventario
-    const withStock = (p ?? []).map((prod: any) => ({
-      ...prod,
-      stock: prod.inventory?.[0]?.stock ?? 0,
-      low_stock_alert: prod.inventory?.[0]?.low_stock_alert ?? 5,
-    }))
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role, campus_id')
+        .eq('id', session.user.id)
+        .single()
 
-    setProducts(withStock)
-    setCategories(c ?? [])
-    setUserRole(profile?.role ?? '')
-    setLoading(false)
-  }
+      if (profileError || !profile) {
+        setError(profileError?.message ?? 'No se pudo cargar el perfil')
+        setLoading(false)
+        return
+      }
 
-  const filtered = products.filter(p => {
-    const q = search.toLowerCase()
-    return (!search || p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q))
-      && (!catFilter || p.category_id === catFilter)
-  })
+      const { data, error } = await supabase
+        .from('inventory')
+        .select(`
+          id,
+          stock,
+          campus_id,
+          product:products(
+            id,
+            name,
+            sku,
+            price,
+            active,
+            image_url,
+            category:categories(name)
+          )
+        `)
+        .order('id', { ascending: false })
 
-  function startEdit(productId: string, field: string, value: string) {
-    setEditId(productId)
-    setEditField(field)
-    setEditVal(value)
-  }
+      if (error) {
+        setError(error.message)
+        setLoading(false)
+        return
+      }
 
-  function cancelEdit() { setEditId(null); setEditField(''); setEditVal('') }
+      const inventoryRows = (data ?? []) as any[]
 
-  async function saveEdit(productId: string) {
-    if (!editVal.trim()) { toast.error('El valor no puede estar vacío'); return }
+      const filteredInventory =
+        profile.role === 'super_admin'
+          ? inventoryRows
+          : inventoryRows.filter((row) => row.campus_id === profile.campus_id)
 
-    const supabase = createClient()
-    const update: any = {}
+      const grouped = new Map<string, ProductRow>()
 
-    if (editField === 'price') {
-      const val = parseFloat(editVal)
-      if (isNaN(val) || val <= 0) { toast.error('Precio inválido'); return }
-      update.price = val
-    } else if (editField === 'name') {
-      update.name = editVal.trim()
-    } else if (editField === 'sku') {
-      update.sku = editVal.trim() || null
+      for (const row of filteredInventory) {
+        const product = Array.isArray(row.product) ? row.product[0] : row.product
+        if (!product?.id) continue
+
+        const categoryRaw = product.category
+        const categoryName = Array.isArray(categoryRaw)
+          ? categoryRaw[0]?.name ?? 'Sin categoría'
+          : categoryRaw?.name ?? 'Sin categoría'
+
+        const existing = grouped.get(product.id)
+
+        if (existing) {
+          existing.stock += Number(row.stock ?? 0)
+        } else {
+          grouped.set(product.id, {
+            id: product.id,
+            name: product.name ?? 'Sin nombre',
+            sku: product.sku ?? null,
+            price: Number(product.price ?? 0),
+            active: Boolean(product.active),
+            image_url: product.image_url ?? null,
+            category_name: categoryName,
+            stock: Number(row.stock ?? 0),
+          })
+        }
+      }
+
+      setProducts(Array.from(grouped.values()))
+      setLoading(false)
     }
 
-    const { error } = await supabase.from('products').update(update).eq('id', productId)
-    if (error) { toast.error(error.message); return }
+    loadProducts()
+  }, [supabase])
 
-    setProducts(prev => prev.map(p => p.id === productId ? { ...p, ...update } : p))
-    cancelEdit()
-    toast.success('Producto actualizado')
+  const categories = useMemo(() => {
+    return Array.from(new Set(products.map((p) => p.category_name))).sort()
+  }, [products])
+
+  const filteredProducts = useMemo(() => {
+    return products.filter((product) => {
+      const matchSearch =
+        !search ||
+        product.name.toLowerCase().includes(search.toLowerCase()) ||
+        (product.sku ?? '').toLowerCase().includes(search.toLowerCase())
+
+      const matchCategory =
+        !categoryFilter || product.category_name === categoryFilter
+
+      return matchSearch && matchCategory
+    })
+  }, [products, search, categoryFilter])
+
+  function formatCurrency(value: number) {
+    return new Intl.NumberFormat('es-CL', {
+      style: 'currency',
+      currency: 'CLP',
+      maximumFractionDigits: 0,
+    }).format(value)
   }
 
-  async function toggleActive(productId: string, active: boolean) {
-    const { error } = await createClient().from('products').update({ active }).eq('id', productId)
-    if (error) { toast.error(error.message); return }
-    setProducts(prev => prev.map(p => p.id === productId ? { ...p, active } : p))
-    toast.success(active ? 'Producto activado' : 'Producto desactivado')
-  }
-
-  const EditableCell = ({ productId, field, value, type = 'text', canEdit = true }: any) => {
-    const isEditing = editId === productId && editField === field
-    if (isEditing) return (
-      <div className="flex items-center gap-1">
-        <input autoFocus type={type} min={type === 'number' ? '0' : undefined}
-          value={editVal} onChange={e => setEditVal(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') saveEdit(productId); if (e.key === 'Escape') cancelEdit() }}
-          className="w-28 bg-zinc-700 border border-amber-500/60 text-white rounded-lg px-2 py-1 text-xs focus:outline-none" />
-        <button onClick={() => saveEdit(productId)} className="text-green-400 hover:text-green-300"><Check size={13} /></button>
-        <button onClick={cancelEdit} className="text-zinc-500 hover:text-zinc-300"><X size={13} /></button>
+  if (loading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
       </div>
     )
+  }
+
+  if (error) {
     return (
-      <div className={`flex items-center gap-1.5 ${canEdit ? 'group cursor-pointer' : ''}`}
-        onClick={() => canEdit && startEdit(productId, field, value?.toString() ?? '')}>
-        <span className={`text-sm ${field === 'price' ? 'font-bold text-amber-400' : 'text-zinc-200'}`}>
-          {field === 'price' ? fmt(value) : (value || '—')}
-        </span>
-        {canEdit && <Edit2 size={11} className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-amber-400 transition shrink-0" />}
+      <div className="rounded-2xl border border-red-900/40 bg-red-950/30 p-6 text-red-200">
+        <p className="text-sm font-medium">Error cargando productos</p>
+        <p className="mt-2 text-sm text-red-300/80">{error}</p>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold text-white">Productos</h1>
-          <p className="text-xs text-zinc-500 mt-0.5">{products.length} productos registrados</p>
+          <h1 className="text-xl font-bold text-white">Productos</h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            {products.length} productos registrados
+          </p>
         </div>
-        <Link href="/products/new"
-          className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-xl px-4 py-2.5 text-sm transition active:scale-[0.98]">
-          <Plus size={14} />Nuevo producto
+
+        <Link
+          href="/products/new"
+          className="inline-flex items-center gap-2 rounded-2xl bg-amber-500 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-400"
+        >
+          <Plus size={18} />
+          Nuevo producto
         </Link>
       </div>
 
-      {/* Filtros */}
-      <div className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-48">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <input value={search} onChange={e => setSearch(e.target.value)}
+      <div className="flex flex-col gap-4 lg:flex-row">
+        <div className="relative flex-1">
+          <Search
+            size={18}
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"
+          />
+          <input
+            type="text"
             placeholder="Buscar producto o SKU..."
-            className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600
-                       rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition" />
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-2xl border border-zinc-700 bg-zinc-800 px-12 py-3 text-sm text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none"
+          />
         </div>
-        <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
-          className="bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition">
+
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="rounded-2xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm text-white focus:border-amber-500 focus:outline-none"
+        >
           <option value="">Todas las categorías</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {categories.map((category) => (
+            <option key={category} value={category}>
+              {category}
+            </option>
+          ))}
         </select>
       </div>
 
-      {/* Tabla */}
-      {loading ? (
-        <div className="flex items-center justify-center h-48">
-          <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+      <div className="overflow-hidden rounded-2xl border border-zinc-700/60 bg-zinc-900/50">
+        <div className="grid grid-cols-[56px_2fr_1.2fr_1.1fr_1fr_0.8fr_0.9fr_1fr] gap-4 border-b border-zinc-800 px-6 py-4 text-sm text-zinc-400">
+          <div>#</div>
+          <div>Producto</div>
+          <div>Categoría</div>
+          <div>SKU</div>
+          <div>Precio</div>
+          <div>Stock</div>
+          <div>Estado</div>
+          <div>Acciones</div>
         </div>
-      ) : (
-        <div className="bg-zinc-800/30 rounded-xl border border-zinc-700/40 overflow-hidden">
-          {userRole === 'super_admin' && (
-            <div className="px-4 py-2.5 bg-amber-500/5 border-b border-amber-500/10">
-              <p className="text-[10px] text-amber-400/70">
-                Haz click en el nombre, SKU o precio para editarlo directamente
-              </p>
-            </div>
-          )}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-700/60">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-zinc-500 w-8">#</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-zinc-500">Producto</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-zinc-500 hidden sm:table-cell">Categoría</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-zinc-500 hidden md:table-cell">SKU</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-zinc-500">Precio</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-zinc-500">Stock</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-zinc-500 hidden sm:table-cell">Estado</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-zinc-500">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-12 text-zinc-600 text-sm">
-                    <Package size={28} className="mx-auto mb-2 text-zinc-700" />
-                    No hay productos que coincidan
-                  </td></tr>
-                ) : filtered.map((product, i) => (
-                  <tr key={product.id} className="border-b border-zinc-700/30 hover:bg-zinc-700/10 transition">
-                    <td className="px-4 py-3 text-xs text-zinc-600">{i + 1}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        {product.image_url ? (
-                          <img src={product.image_url} alt={product.name} className="w-8 h-8 rounded-lg object-cover shrink-0" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-lg bg-zinc-700/60 flex items-center justify-center shrink-0">
-                            <Package size={13} className="text-zinc-500" />
-                          </div>
-                        )}
-                        <EditableCell productId={product.id} field="name" value={product.name} canEdit={userRole === 'super_admin'} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 hidden sm:table-cell">
-                      <span className="text-xs bg-zinc-700/60 text-zinc-400 px-2 py-1 rounded-lg">
-                        {categories.find(c => c.id === product.category_id)?.name ?? '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <EditableCell productId={product.id} field="sku" value={product.sku} canEdit={userRole === 'super_admin'} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <EditableCell productId={product.id} field="price" value={product.price} type="number" canEdit={userRole === 'super_admin'} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${
-                        product.stock === 0 ? 'bg-red-500/10 text-red-400' :
-                        product.stock <= 5  ? 'bg-orange-500/10 text-orange-400' :
-                                              'bg-green-500/10 text-green-400'}`}>
-                        {product.stock ?? 0}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 hidden sm:table-cell">
-                      <button onClick={() => toggleActive(product.id, !product.active)} className="flex items-center gap-1.5 transition">
-                        {product.active !== false
-                          ? <><ToggleRight size={18} className="text-green-400" /><span className="text-xs text-green-400">Activo</span></>
-                          : <><ToggleLeft size={18} className="text-zinc-600" /><span className="text-xs text-zinc-600">Inactivo</span></>}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link href={`/products/${product.id}`}
-                        className="text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 px-3 py-1.5 rounded-lg transition">
-                        Editar todo
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+        {filteredProducts.length === 0 ? (
+          <div className="px-6 py-10 text-sm text-zinc-500">
+            No hay productos para mostrar.
           </div>
-        </div>
-      )}
+        ) : (
+          filteredProducts.map((product, index) => (
+            <div
+              key={product.id}
+              className="grid grid-cols-[56px_2fr_1.2fr_1.1fr_1fr_0.8fr_0.9fr_1fr] items-center gap-4 border-b border-zinc-800/70 px-6 py-4 last:border-b-0"
+            >
+              <div className="text-zinc-500">{index + 1}</div>
+
+              <div className="flex items-center gap-3">
+                {product.image_url ? (
+                  <img
+                    src={product.image_url}
+                    alt={product.name}
+                    className="h-12 w-12 rounded-xl object-cover"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800 text-xs text-zinc-500">
+                    □
+                  </div>
+                )}
+
+                <div>
+                  <p className="font-medium text-white">{product.name}</p>
+                </div>
+              </div>
+
+              <div>
+                <span className="rounded-lg bg-zinc-800 px-3 py-1 text-sm text-zinc-300">
+                  {product.category_name}
+                </span>
+              </div>
+
+              <div className="text-white">{product.sku || '—'}</div>
+
+              <div className="font-semibold text-amber-400">
+                {formatCurrency(product.price)}
+              </div>
+
+              <div>
+                <span className="rounded-lg bg-green-500/10 px-3 py-1 text-sm font-semibold text-green-300">
+                  {product.stock}
+                </span>
+              </div>
+
+              <div>
+                <span
+                  className={`rounded-lg px-3 py-1 text-sm ${
+                    product.active
+                      ? 'bg-green-500/10 text-green-300'
+                      : 'bg-red-500/10 text-red-300'
+                  }`}
+                >
+                  {product.active ? 'Activo' : 'Inactivo'}
+                </span>
+              </div>
+
+              <div>
+                <Link
+                  href={`/products/${product.id}`}
+                  className="inline-flex rounded-xl bg-zinc-700 px-4 py-2 text-sm text-white transition hover:bg-zinc-600"
+                >
+                  Editar todo
+                </Link>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   )
 }
