@@ -1,25 +1,14 @@
 import { NextResponse } from 'next/server'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
 export async function POST(req: Request) {
   try {
-    const cookieStore = cookies()
+    // ✅ Cliente con sesión (AUTH REAL)
+    const supabase = createRouteHandlerClient({ cookies })
 
-    // Cliente con sesión (usuario actual)
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            Cookie: cookieStore.toString(),
-          },
-        },
-      }
-    )
-
-    // Cliente admin (bypass RLS)
+    // 🔥 Cliente admin (bypass RLS)
     const adminClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -37,7 +26,7 @@ export async function POST(req: Request) {
       campus_id,
     } = body
 
-    // 🔐 Obtener usuario
+    // 🔐 Obtener usuario autenticado
     const {
       data: { user },
       error: userError,
@@ -47,7 +36,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
     }
 
-    // 👤 Perfil
+    // 👤 Obtener perfil
     const { data: profile } = await adminClient
       .from('profiles')
       .select('id, role, campus_id')
@@ -58,7 +47,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Perfil no encontrado' }, { status: 404 })
     }
 
-    // 🧠 Determinar campus de venta
+    // 🧠 Determinar campus
     const sellingCampusId =
       profile.role === 'super_admin' ? campus_id : profile.campus_id
 
@@ -66,10 +55,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Campus inválido' }, { status: 400 })
     }
 
-    // 🧾 Generar número de orden (STRING, no número)
+    // 🧾 Número de orden (STRING seguro)
     const orderNumber = `ORD-${Date.now()}`
 
-    // 🧾 Crear orden (SIN status manual → usa default 'pending')
+    // 🧾 Crear orden (usa default status = pending)
     const { data: createdOrder, error: orderError } = await adminClient
       .from('orders')
       .insert({
@@ -92,9 +81,9 @@ export async function POST(req: Request) {
 
     const orderId = createdOrder.id
 
-    // 📦 Insertar items + descontar stock + registrar movimiento
+    // 📦 Procesar items
     for (const item of items) {
-      // 1. Guardar item
+      // 1. Insertar item
       const { error: itemError } = await adminClient
         .from('order_items')
         .insert({
@@ -106,11 +95,10 @@ export async function POST(req: Request) {
         })
 
       if (itemError) {
-        console.error('Error creando item:', itemError)
         return NextResponse.json({ error: itemError.message }, { status: 400 })
       }
 
-      // 2. Obtener stock actual
+      // 2. Obtener stock
       const { data: inventory } = await adminClient
         .from('inventory')
         .select('stock')
@@ -127,7 +115,7 @@ export async function POST(req: Request) {
 
       if (inventory.stock < item.quantity) {
         return NextResponse.json(
-          { error: `Stock insuficiente para producto ${item.product_id}` },
+          { error: `Stock insuficiente para producto` },
           { status: 400 }
         )
       }
@@ -142,7 +130,6 @@ export async function POST(req: Request) {
         .eq('campus_id', sellingCampusId)
 
       if (stockError) {
-        console.error('Error actualizando stock:', stockError)
         return NextResponse.json({ error: stockError.message }, { status: 400 })
       }
 
@@ -159,7 +146,6 @@ export async function POST(req: Request) {
         })
 
       if (movementError) {
-        console.error('Error movimiento inventario:', movementError)
         return NextResponse.json({ error: movementError.message }, { status: 400 })
       }
     }
