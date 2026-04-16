@@ -97,13 +97,13 @@ export default function CheckoutModal({
         return
       }
 
-      toast.success(`Venta registrada correctamente (${data.order_number})`)
+      toast.success(`Venta registrada correctamente (#${data.order_number})`)
       clearCart()
       onNewSale()
       setLoading(false)
 
       setTimeout(() => {
-        window.location.reload()
+        window.location.href = `/orders/${data.order_id}/print`
       }, 700)
     } catch (error: any) {
       toast.error(error?.message ?? 'Error inesperado al registrar la venta')
@@ -252,7 +252,7 @@ export default function CheckoutModal({
       <ConfirmActionModal
         open={confirmOpen}
         title="¿Confirmar esta venta?"
-        description="Se creará la orden, se descontará el stock del campus y se registrará el movimiento de salida."
+        description="Se registrará la venta, se descontará el stock, se enviará el comprobante al cliente y se abrirá el voucher para impresión."
         confirmText="Sí, confirmar venta"
         cancelText="Revisar otra vez"
         loading={loading}

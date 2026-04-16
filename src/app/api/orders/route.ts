@@ -1,5 +1,25 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { Resend } from 'resend'
+
+const resend = new Resend(process.env.RESEND_API_KEY!)
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    maximumFractionDigits: 0,
+  }).format(value || 0)
+}
+
+function escapeHtml(value: string) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
 
 export async function POST(req: Request) {
   try {
@@ -57,6 +77,9 @@ export async function POST(req: Request) {
     const notes = body.notes ?? null
     const discount = Number(body.discount ?? 0)
     const requestedCampusId = body.campus_id ?? null
+
+    const clientName = (body.client_name ?? '').trim() || null
+    const clientEmail = (body.client_email ?? '').trim().toLowerCase() || null
 
     if (items.length === 0) {
       return NextResponse.json(
@@ -199,7 +222,7 @@ export async function POST(req: Request) {
         notes,
         status: 'paid',
       })
-      .select('id, order_number, status')
+      .select('id, order_number, status, created_at, total, discount, payment_method, notes')
       .single()
 
     if (orderError || !createdOrder) {
@@ -207,6 +230,23 @@ export async function POST(req: Request) {
         { error: orderError?.message ?? 'No se pudo crear la orden' },
         { status: 400 }
       )
+    }
+
+    if (clientEmail) {
+      const { error: contactError } = await adminClient
+        .from('order_contacts')
+        .insert({
+          order_id: createdOrder.id,
+          client_name: clientName,
+          client_email: clientEmail,
+        })
+
+      if (contactError) {
+        return NextResponse.json(
+          { error: contactError.message },
+          { status: 400 }
+        )
+      }
     }
 
     const orderItemsRows = normalizedItems.map((item: any) => ({
@@ -226,6 +266,8 @@ export async function POST(req: Request) {
         { status: 400 }
       )
     }
+
+    const enrichedItems = []
 
     for (const item of normalizedItems) {
       const inventory = inventoryMap.get(item.product_id)
@@ -263,6 +305,100 @@ export async function POST(req: Request) {
           { error: movementError.message },
           { status: 400 }
         )
+      }
+
+      const { data: productData } = await adminClient
+        .from('products')
+        .select('name, sku')
+        .eq('id', item.product_id)
+        .single()
+
+      enrichedItems.push({
+        name: productData?.name ?? 'Producto',
+        sku: productData?.sku ?? '—',
+        quantity: item.quantity,
+        unitPrice: item.unit_price,
+        lineTotal: item.quantity * item.unit_price,
+      })
+    }
+
+    if (clientEmail && process.env.RESEND_API_KEY) {
+      const html = `
+        <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; color: #111;">
+          <div style="text-align:center; margin-bottom: 24px;">
+            <div style="width:48px; height:48px; line-height:48px; margin:0 auto 12px; background:#111; color:#fff; border-radius:12px; font-weight:700;">A</div>
+            <h2 style="margin:0;">ARM MERCH</h2>
+            <p style="margin:6px 0 0; color:#666;">Comprobante de compra</p>
+          </div>
+
+          <hr style="border:none; border-top:1px solid #ddd; margin:16px 0;" />
+
+          <p><strong>Cliente:</strong> ${escapeHtml(clientName || 'Cliente')}</p>
+          <p><strong>Orden:</strong> #${escapeHtml(String(createdOrder.order_number))}</p>
+          <p><strong>Fecha:</strong> ${escapeHtml(new Date(createdOrder.created_at).toLocaleString('es-CL'))}</p>
+          <p><strong>Método de pago:</strong> ${escapeHtml(createdOrder.payment_method ?? 'Sin definir')}</p>
+
+          <hr style="border:none; border-top:1px solid #ddd; margin:16px 0;" />
+
+          ${enrichedItems.map((item) => `
+            <div style="display:flex; justify-content:space-between; gap:16px; margin-bottom:12px;">
+              <div>
+                <div style="font-weight:600;">${escapeHtml(item.name)}</div>
+                <div style="font-size:12px; color:#666;">SKU: ${escapeHtml(item.sku)}</div>
+                <div style="font-size:12px; color:#666;">${item.quantity} × ${escapeHtml(formatCurrency(item.unitPrice))}</div>
+              </div>
+              <div style="font-weight:600; white-space:nowrap;">
+                ${escapeHtml(formatCurrency(item.lineTotal))}
+              </div>
+            </div>
+          `).join('')}
+
+          <hr style="border:none; border-top:1px solid #ddd; margin:16px 0;" />
+
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <span style="color:#666;">Subtotal</span>
+            <span>${escapeHtml(formatCurrency(subtotalCalculado))}</span>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <span style="color:#666;">Descuento</span>
+            <span>${escapeHtml(formatCurrency(Number(createdOrder.discount ?? 0)))}</span>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; font-size:18px; font-weight:700; margin-top:10px;">
+            <span>Total</span>
+            <span>${escapeHtml(formatCurrency(Number(createdOrder.total ?? 0)))}</span>
+          </div>
+
+          ${
+            createdOrder.notes
+              ? `
+            <hr style="border:none; border-top:1px solid #ddd; margin:16px 0;" />
+            <div>
+              <div style="font-size:12px; color:#666; margin-bottom:4px;">Nota</div>
+              <div>${escapeHtml(createdOrder.notes)}</div>
+            </div>
+          `
+              : ''
+          }
+
+          <hr style="border:none; border-top:1px solid #ddd; margin:16px 0;" />
+
+          <p style="text-align:center; color:#666; font-size:12px;">
+            Gracias por tu compra 🙌
+          </p>
+        </div>
+      `
+
+      const { error: mailError } = await resend.emails.send({
+        from: 'ARM Merch <onboarding@resend.dev>',
+        to: clientEmail,
+        subject: `Comprobante Orden #${createdOrder.order_number}`,
+        html,
+      })
+
+      if (mailError) {
+        console.error('Receipt email error:', mailError)
       }
     }
 
