@@ -1,97 +1,282 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// ⚠️ usa service role SOLO en backend
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
+    const authHeader = req.headers.get('authorization')
+
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '').trim()
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
+      return NextResponse.json(
+        { error: 'Faltan variables de entorno de Supabase' },
+        { status: 500 }
+      )
+    }
+
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+
+    const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
 
     const {
-      items,
-      total,
-      payment_method,
-      campus_id,
-      client_name,
-      client_email,
-    } = body
+      data: { user },
+      error: userError,
+    } = await authClient.auth.getUser()
 
-    // 🔒 validación básica
-    if (!items || items.length === 0) {
-      return NextResponse.json({ error: 'Sin productos' }, { status: 400 })
+    if (userError || !user) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
     }
 
-    // 🧾 crear orden
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        total,
-        payment_method,
-        campus_id,
-        client_name,
-        client_email,
-        status: 'paid', // ✅ CLAVE: venta confirmada
-      })
-      .select()
+    const body = await req.json()
+
+    const items = Array.isArray(body.items) ? body.items : []
+    const paymentMethod = body.payment_method ?? null
+    const notes = body.notes ?? null
+    const discount = Number(body.discount ?? 0)
+    const requestedCampusId = body.campus_id ?? null
+
+    if (items.length === 0) {
+      return NextResponse.json(
+        { error: 'La venta no tiene productos' },
+        { status: 400 }
+      )
+    }
+
+    const { data: profile, error: profileError } = await adminClient
+      .from('profiles')
+      .select('id, role, campus_id')
+      .eq('id', user.id)
       .single()
 
-    if (orderError) {
-      console.error(orderError)
-      return NextResponse.json({ error: orderError.message }, { status: 500 })
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { error: 'Perfil no encontrado' },
+        { status: 404 }
+      )
     }
 
-    // 📦 insertar items
-    const orderItems = items.map((item: any) => ({
-      order_id: order.id,
-      product_id: item.id,
-      quantity: item.quantity,
-      price: item.price,
+    const sellingCampusId =
+      profile.role === 'super_admin'
+        ? requestedCampusId || profile.campus_id
+        : profile.campus_id
+
+    if (!sellingCampusId) {
+      return NextResponse.json(
+        { error: 'Campus inválido' },
+        { status: 400 }
+      )
+    }
+
+    const normalizedItems = items.map((item: any) => ({
+      product_id: item.product_id,
+      quantity: Number(item.quantity ?? 0),
+      unit_price: Number(item.unit_price ?? item.price ?? 0),
     }))
 
-    const { error: itemsError } = await supabase
+    const invalidItem = normalizedItems.find(
+      (item: any) =>
+        !item.product_id ||
+        item.quantity <= 0 ||
+        item.unit_price < 0
+    )
+
+    if (invalidItem) {
+      return NextResponse.json(
+        { error: 'Hay productos inválidos en la venta' },
+        { status: 400 }
+      )
+    }
+
+    if (discount < 0) {
+      return NextResponse.json(
+        { error: 'El descuento no puede ser negativo' },
+        { status: 400 }
+      )
+    }
+
+    const productIds = normalizedItems.map((item: any) => item.product_id)
+
+    const { data: inventoryRows, error: inventoryError } = await adminClient
+      .from('inventory')
+      .select('id, product_id, stock')
+      .eq('campus_id', sellingCampusId)
+      .in('product_id', productIds)
+
+    if (inventoryError) {
+      return NextResponse.json(
+        { error: inventoryError.message },
+        { status: 400 }
+      )
+    }
+
+    const inventoryMap = new Map(
+      (inventoryRows ?? []).map((row: any) => [row.product_id, row])
+    )
+
+    for (const item of normalizedItems) {
+      const inventory = inventoryMap.get(item.product_id)
+
+      if (!inventory) {
+        return NextResponse.json(
+          { error: 'Uno de los productos no tiene inventario en este campus' },
+          { status: 400 }
+        )
+      }
+
+      if (Number(inventory.stock ?? 0) < item.quantity) {
+        return NextResponse.json(
+          {
+            error: `Stock insuficiente para uno de los productos. Disponible: ${inventory.stock ?? 0}`,
+          },
+          { status: 400 }
+        )
+      }
+    }
+
+    const subtotalCalculado = normalizedItems.reduce(
+      (sum: number, item: any) => sum + item.quantity * item.unit_price,
+      0
+    )
+
+    const totalCalculado = subtotalCalculado - discount
+
+    if (totalCalculado < 0) {
+      return NextResponse.json(
+        { error: 'El total no puede ser negativo' },
+        { status: 400 }
+      )
+    }
+
+    const { data: lastOrder, error: lastOrderError } = await adminClient
+      .from('orders')
+      .select('order_number')
+      .order('order_number', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (lastOrderError) {
+      return NextResponse.json(
+        { error: lastOrderError.message },
+        { status: 400 }
+      )
+    }
+
+    const lastOrderNumber = Number(lastOrder?.order_number ?? 1000)
+    const orderNumber = lastOrderNumber + 1
+
+    const { data: createdOrder, error: orderError } = await adminClient
+      .from('orders')
+      .insert({
+        order_number: orderNumber,
+        campus_id: sellingCampusId,
+        seller_id: profile.id,
+        payment_method: paymentMethod,
+        discount,
+        total: totalCalculado,
+        notes,
+        status: 'paid',
+      })
+      .select('id, order_number, status')
+      .single()
+
+    if (orderError || !createdOrder) {
+      return NextResponse.json(
+        { error: orderError?.message ?? 'No se pudo crear la orden' },
+        { status: 400 }
+      )
+    }
+
+    const orderItemsRows = normalizedItems.map((item: any) => ({
+      order_id: createdOrder.id,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+    }))
+
+    const { error: orderItemsError } = await adminClient
       .from('order_items')
-      .insert(orderItems)
+      .insert(orderItemsRows)
 
-    if (itemsError) {
-      console.error(itemsError)
-      return NextResponse.json({ error: itemsError.message }, { status: 500 })
+    if (orderItemsError) {
+      return NextResponse.json(
+        { error: orderItemsError.message },
+        { status: 400 }
+      )
     }
 
-    // 📉 actualizar stock
-    for (const item of items) {
-      const { data: stockData, error: stockFetchError } = await supabase
-        .from('inventory')
-        .select('stock')
-        .eq('product_id', item.id)
-        .eq('campus_id', campus_id)
-        .single()
+    for (const item of normalizedItems) {
+      const inventory = inventoryMap.get(item.product_id)
+      const newStock = Number(inventory.stock ?? 0) - item.quantity
 
-      if (stockFetchError) {
-        console.error(stockFetchError)
-        continue
+      const { error: stockError } = await adminClient
+        .from('inventory')
+        .update({
+          stock: newStock,
+          updated_at: new Date().toISOString(),
+          updated_by: profile.id,
+        })
+        .eq('id', inventory.id)
+
+      if (stockError) {
+        return NextResponse.json(
+          { error: stockError.message },
+          { status: 400 }
+        )
       }
 
-      const newStock = (stockData?.stock || 0) - item.quantity
+      const { error: movementError } = await adminClient
+        .from('inventory_movements')
+        .insert({
+          product_id: item.product_id,
+          campus_id: sellingCampusId,
+          type: 'salida',
+          quantity: item.quantity,
+          notes: `Venta ${createdOrder.order_number}`,
+          created_by: profile.id,
+        })
 
-      const { error: stockUpdateError } = await supabase
-        .from('inventory')
-        .update({ stock: newStock })
-        .eq('product_id', item.id)
-        .eq('campus_id', campus_id)
-
-      if (stockUpdateError) {
-        console.error(stockUpdateError)
+      if (movementError) {
+        return NextResponse.json(
+          { error: movementError.message },
+          { status: 400 }
+        )
       }
     }
 
-    return NextResponse.json({ success: true, order })
-
+    return NextResponse.json({
+      success: true,
+      order_id: createdOrder.id,
+      order_number: createdOrder.order_number,
+      status: createdOrder.status,
+    })
   } catch (error: any) {
-    console.error(error)
-    return NextResponse.json({ error: 'Error interno' }, { status: 500 })
+    console.error('POST /api/orders error:', error)
+    return NextResponse.json(
+      { error: error?.message ?? 'Error interno del servidor' },
+      { status: 500 }
+    )
   }
 }
