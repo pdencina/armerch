@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import SendReceipt from '@/components/orders/send-receipt'
+import ResendVoucherButton from '@/components/orders/resend-voucher-button'
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('es-CL', {
@@ -234,6 +235,8 @@ export default async function OrderDetailPage({
           >
             Imprimir ticket
           </Link>
+
+          <ResendVoucherButton orderId={order.id} />
         </div>
 
         <div className="mt-5">
