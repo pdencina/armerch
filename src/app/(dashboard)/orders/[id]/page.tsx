@@ -1,8 +1,44 @@
-import { createClient } from '@/lib/supabase/server'
-import { notFound, redirect } from 'next/navigation'
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useParams, useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import SendReceipt from '@/components/orders/send-receipt'
 import ResendVoucherButton from '@/components/orders/resend-voucher-button'
+
+type OrderRow = {
+  id: string
+  order_number: number | string
+  campus_id: string | null
+  payment_method: string | null
+  total: number
+  discount?: number | null
+  created_at: string
+  status?: string | null
+  notes?: string | null
+}
+
+type CampusRow = {
+  id: string
+  name: string
+}
+
+type ItemRow = {
+  id: string
+  quantity: number
+  unit_price: number
+  products:
+    | {
+        name?: string | null
+        sku?: string | null
+      }
+    | Array<{
+        name?: string | null
+        sku?: string | null
+      }>
+    | null
+}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('es-CL', {
@@ -16,94 +52,191 @@ function formatDate(value: string) {
   return new Date(value).toLocaleString('es-CL')
 }
 
-export default async function OrderDetailPage({
-  params,
-}: {
-  params: { id: string }
-}) {
-  const supabase = await createClient()
+export default function OrderDetailPage() {
+  const supabase = createClient()
+  const params = useParams()
+  const router = useRouter()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const orderId = String(params?.id ?? '')
 
-  if (!user) redirect('/login')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, campus_id')
-    .eq('id', user.id)
-    .single()
+  const [order, setOrder] = useState<OrderRow | null>(null)
+  const [profile, setProfile] = useState<{ role: string; campus_id: string | null } | null>(null)
+  const [campuses, setCampuses] = useState<CampusRow[]>([])
+  const [items, setItems] = useState<ItemRow[]>([])
 
-  if (!profile) redirect('/login')
+  useEffect(() => {
+    async function load() {
+      if (!orderId) {
+        setError('ID de orden inválido')
+        setLoading(false)
+        return
+      }
 
-  const { data: order } = await supabase
-    .from('orders')
-    .select(`
-      id,
-      order_number,
-      campus_id,
-      payment_method,
-      total,
-      discount,
-      created_at,
-      status,
-      notes
-    `)
-    .eq('id', params.id)
-    .single()
+      setLoading(true)
+      setError(null)
 
-  if (!order) notFound()
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
 
-  if (profile.role !== 'super_admin' && profile.campus_id !== order.campus_id) {
-    notFound()
+      if (sessionError || !session) {
+        router.push('/login')
+        return
+      }
+
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('role, campus_id')
+        .eq('id', session.user.id)
+        .single()
+
+      if (profileError || !profileData) {
+        router.push('/login')
+        return
+      }
+
+      const [
+        { data: orderData, error: orderError },
+        { data: itemsData, error: itemsError },
+        { data: campusData, error: campusError },
+      ] = await Promise.all([
+        supabase
+          .from('orders')
+          .select(`
+            id,
+            order_number,
+            campus_id,
+            payment_method,
+            total,
+            discount,
+            created_at,
+            status,
+            notes
+          `)
+          .eq('id', orderId)
+          .single(),
+
+        supabase
+          .from('order_items')
+          .select(`
+            id,
+            quantity,
+            unit_price,
+            products (
+              name,
+              sku
+            )
+          `)
+          .eq('order_id', orderId),
+
+        supabase.from('campus').select('id, name'),
+      ])
+
+      if (orderError || !orderData) {
+        setError('No se pudo cargar la orden')
+        setLoading(false)
+        return
+      }
+
+      if (itemsError) {
+        setError(itemsError.message)
+        setLoading(false)
+        return
+      }
+
+      if (campusError) {
+        setError(campusError.message)
+        setLoading(false)
+        return
+      }
+
+      if (
+        profileData.role !== 'super_admin' &&
+        profileData.campus_id !== orderData.campus_id
+      ) {
+        setError('No tienes acceso a esta orden')
+        setLoading(false)
+        return
+      }
+
+      setProfile(profileData)
+      setOrder(orderData as OrderRow)
+      setItems((itemsData ?? []) as ItemRow[])
+      setCampuses((campusData ?? []) as CampusRow[])
+      setLoading(false)
+    }
+
+    load()
+  }, [orderId, router, supabase])
+
+  const campusMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const campus of campuses) {
+      map.set(campus.id, campus.name)
+    }
+    return map
+  }, [campuses])
+
+  const campusName = useMemo(() => {
+    if (!order?.campus_id) return 'Sin campus'
+    return campusMap.get(order.campus_id) ?? 'Sin campus'
+  }, [campusMap, order])
+
+  const safeItems = useMemo(() => {
+    return items.map((item) => {
+      const product = Array.isArray(item.products)
+        ? item.products[0]
+        : item.products
+
+      return {
+        id: item.id,
+        quantity: Number(item.quantity ?? 0),
+        unit_price: Number(item.unit_price ?? 0),
+        name: product?.name ?? 'Producto',
+        sku: product?.sku ?? '—',
+        lineTotal: Number(item.quantity ?? 0) * Number(item.unit_price ?? 0),
+      }
+    })
+  }, [items])
+
+  const subtotal = useMemo(() => {
+    return safeItems.reduce((sum, item) => sum + item.lineTotal, 0)
+  }, [safeItems])
+
+  const discount = Number(order?.discount ?? 0)
+  const total = Number(order?.total ?? 0)
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+      </div>
+    )
   }
 
-  const [{ data: items }, { data: campuses }] = await Promise.all([
-    supabase
-      .from('order_items')
-      .select(`
-        id,
-        quantity,
-        unit_price,
-        products (
-          name,
-          sku
-        )
-      `)
-      .eq('order_id', order.id),
+  if (error || !order) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-red-900/40 bg-red-950/30 p-6 text-red-200">
+          <p className="text-sm font-medium">No se pudo cargar el producto</p>
+          <p className="mt-2 text-sm text-red-300/80">
+            {error ?? 'Producto no encontrado'}
+          </p>
+        </div>
 
-    supabase.from('campus').select('id, name'),
-  ])
-
-  const campusMap = new Map((campuses ?? []).map((c: any) => [c.id, c.name]))
-  const campusName = order.campus_id
-    ? campusMap.get(order.campus_id) ?? 'Sin campus'
-    : 'Sin campus'
-
-  const safeItems = (items ?? []).map((item: any) => {
-    const product = Array.isArray(item.products)
-      ? item.products[0]
-      : item.products
-
-    return {
-      id: item.id,
-      quantity: Number(item.quantity ?? 0),
-      unit_price: Number(item.unit_price ?? 0),
-      name: product?.name ?? 'Producto',
-      sku: product?.sku ?? '—',
-      lineTotal:
-        Number(item.quantity ?? 0) * Number(item.unit_price ?? 0),
-    }
-  })
-
-  const subtotal = safeItems.reduce(
-    (sum: number, item: any) => sum + item.lineTotal,
-    0
-  )
-
-  const discount = Number(order.discount ?? 0)
-  const total = Number(order.total ?? 0)
+        <Link
+          href="/orders"
+          className="inline-flex items-center justify-center rounded-xl bg-zinc-800 px-4 py-2.5 text-sm text-white hover:bg-zinc-700"
+        >
+          Volver a órdenes
+        </Link>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -136,9 +269,7 @@ export default async function OrderDetailPage({
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
           <p className="text-sm text-zinc-400">Fecha</p>
-          <p className="mt-1 text-white">
-            {formatDate(order.created_at)}
-          </p>
+          <p className="mt-1 text-white">{formatDate(order.created_at)}</p>
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
@@ -155,16 +286,12 @@ export default async function OrderDetailPage({
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
           <p className="text-sm text-zinc-400">Estado</p>
-          <p className="mt-1 text-white">
-            {order.status ?? '—'}
-          </p>
+          <p className="mt-1 text-white">{order.status ?? '—'}</p>
         </div>
       </div>
 
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
-        <h2 className="mb-4 text-lg font-semibold text-white">
-          Productos
-        </h2>
+        <h2 className="mb-4 text-lg font-semibold text-white">Productos</h2>
 
         <div className="space-y-4">
           {safeItems.length === 0 ? (
@@ -176,12 +303,8 @@ export default async function OrderDetailPage({
                 className="flex items-center justify-between border-b border-zinc-800 pb-3"
               >
                 <div>
-                  <p className="font-medium text-white">
-                    {item.name}
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    SKU: {item.sku}
-                  </p>
+                  <p className="font-medium text-white">{item.name}</p>
+                  <p className="text-xs text-zinc-500">SKU: {item.sku}</p>
                   <p className="text-sm text-zinc-400">
                     {item.quantity} × {formatCurrency(item.unit_price)}
                   </p>
@@ -215,17 +338,13 @@ export default async function OrderDetailPage({
 
       {order.notes && (
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
-          <h2 className="mb-2 text-lg font-semibold text-white">
-            Nota
-          </h2>
+          <h2 className="mb-2 text-lg font-semibold text-white">Nota</h2>
           <p className="text-zinc-300">{order.notes}</p>
         </div>
       )}
 
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5">
-        <h2 className="mb-3 text-lg font-semibold text-white">
-          Acciones
-        </h2>
+        <h2 className="mb-3 text-lg font-semibold text-white">Acciones</h2>
 
         <div className="flex flex-wrap gap-3">
           <Link
