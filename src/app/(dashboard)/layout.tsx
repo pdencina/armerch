@@ -16,6 +16,7 @@ export default function DashboardLayout({
   const [profile, setProfile] = useState<any>(null)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -55,6 +56,17 @@ export default function DashboardLayout({
     init()
   }, [router])
 
+  useEffect(() => {
+    function handleResize() {
+      if (window.innerWidth >= 1024) {
+        setSidebarOpen(false)
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   if (!ready) {
     return (
       <div className="flex h-screen items-center justify-center bg-zinc-950">
@@ -65,8 +77,8 @@ export default function DashboardLayout({
 
   if (error || !profile) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-white">
-        <div className="rounded-xl border border-red-500/20 bg-zinc-900 p-6 text-sm">
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4 text-white">
+        <div className="max-w-md rounded-xl border border-red-500/20 bg-zinc-900 p-6 text-sm">
           <p className="font-semibold text-red-400">No se pudo cargar el perfil</p>
           <p className="mt-2 text-zinc-300">
             {error ?? 'Perfil no encontrado en la tabla profiles.'}
@@ -83,11 +95,41 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen overflow-hidden bg-zinc-950">
-      <Sidebar role={profile.role} campusName={campusName} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Navbar user={profile} />
-        <main className="flex-1 overflow-y-auto p-5">{children}</main>
+      {/* Sidebar desktop */}
+      <div className="hidden lg:block">
+        <Sidebar
+          role={profile.role}
+          campusName={campusName}
+          mobileOpen={false}
+          onClose={() => {}}
+        />
       </div>
+
+      {/* Sidebar mobile / tablet */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-[90] bg-black/70 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="h-full w-[280px] max-w-[85vw]">
+            <Sidebar
+              role={profile.role}
+              campusName={campusName}
+              mobileOpen={sidebarOpen}
+              onClose={() => setSidebarOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <Navbar
+          user={profile}
+          onOpenSidebar={() => setSidebarOpen(true)}
+        />
+
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-5">
+          {children}
+        </main>
+      </div>
+
       <Toaster
         position="bottom-right"
         toastOptions={{

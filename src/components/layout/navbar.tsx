@@ -3,14 +3,25 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { LogOut, Search, X, Sun, Moon, Bell, Package, AlertTriangle, TrendingDown } from 'lucide-react'
+import {
+  LogOut,
+  Search,
+  X,
+  Sun,
+  Moon,
+  Bell,
+  Package,
+  AlertTriangle,
+  TrendingDown,
+  Menu,
+} from 'lucide-react'
 
 const CAMPUS_COLORS: Record<string, string> = {
-  'ARM Santiago':    'bg-blue-500/10 text-blue-400',
+  'ARM Santiago': 'bg-blue-500/10 text-blue-400',
   'ARM Puente Alto': 'bg-purple-500/10 text-purple-400',
-  'ARM Punta Arenas':'bg-teal-500/10 text-teal-400',
-  'ARM Montevideo':  'bg-amber-500/10 text-amber-400',
-  'ARM Maracaibo':   'bg-red-500/10 text-red-400',
+  'ARM Punta Arenas': 'bg-teal-500/10 text-teal-400',
+  'ARM Montevideo': 'bg-amber-500/10 text-amber-400',
+  'ARM Maracaibo': 'bg-red-500/10 text-red-400',
 }
 
 interface Notification {
@@ -21,18 +32,23 @@ interface Notification {
   time: string
 }
 
-export default function Navbar({ user }: { user: any }) {
-  const router  = useRouter()
-  const [searchOpen, setSearchOpen]     = useState(false)
-  const [notifOpen, setNotifOpen]       = useState(false)
-  const [query, setQuery]               = useState('')
-  const [results, setResults]           = useState<any[]>([])
-  const [dark, setDark]                 = useState(true)
-  const [notifs, setNotifs]             = useState<Notification[]>([])
-  const [unread, setUnread]             = useState(0)
+export default function Navbar({
+  user,
+  onOpenSidebar,
+}: {
+  user: any
+  onOpenSidebar?: () => void
+}) {
+  const router = useRouter()
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<any[]>([])
+  const [dark, setDark] = useState(true)
+  const [notifs, setNotifs] = useState<Notification[]>([])
+  const [unread, setUnread] = useState(0)
   const notifRef = useRef<HTMLDivElement>(null)
 
-  // Iniciar tema
   useEffect(() => {
     const saved = localStorage.getItem('arm-theme')
     const isDark = saved ? saved === 'dark' : true
@@ -40,26 +56,30 @@ export default function Navbar({ user }: { user: any }) {
     document.documentElement.classList.toggle('light-mode', !isDark)
   }, [])
 
-  // Cargar notificaciones reales — filtradas por campus del usuario
   useEffect(() => {
     async function loadNotifs() {
       const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (!session) return
 
-      // Obtener campus del usuario para filtrar notificaciones
       const campusId = user?.campus_id ?? null
-      const role     = user?.role ?? 'voluntario'
+      const role = user?.role ?? 'voluntario'
 
-      let lowStockQuery = supabase.from('products_with_stock')
+      let lowStockQuery = supabase
+        .from('products_with_stock')
         .select('id, name, stock, low_stock_alert, campus_name, campus_id')
-        .lte('stock', 5).gt('stock', 0).limit(5)
+        .lte('stock', 5)
+        .gt('stock', 0)
+        .limit(5)
 
-      let outStockQuery = supabase.from('products_with_stock')
+      let outStockQuery = supabase
+        .from('products_with_stock')
         .select('id, name, stock, campus_name, campus_id')
-        .eq('stock', 0).limit(5)
+        .eq('stock', 0)
+        .limit(5)
 
-      // Admin y voluntario solo ven alertas de su campus
       if (role !== 'super_admin' && campusId) {
         lowStockQuery = lowStockQuery.eq('campus_id', campusId)
         outStockQuery = outStockQuery.eq('campus_id', campusId)
@@ -69,27 +89,36 @@ export default function Navbar({ user }: { user: any }) {
       const { data: outStock } = await outStockQuery
 
       const list: Notification[] = []
-      ;(outStock ?? []).forEach(p => list.push({
-        id: `out-${p.id}`, type: 'out_stock',
-        title: `Sin stock: ${p.name}`,
-        desc: p.campus_name ? `Campus: ${p.campus_name}` : 'Sin campus asignado',
-        time: 'Ahora',
-      }))
-      ;(lowStock ?? []).forEach(p => list.push({
-        id: `low-${p.id}`, type: 'low_stock',
-        title: `Stock bajo: ${p.name}`,
-        desc: `Quedan ${p.stock} uds.${p.campus_name ? ` · ${p.campus_name}` : ''}`,
-        time: 'Ahora',
-      }))
+
+      ;(outStock ?? []).forEach((p) =>
+        list.push({
+          id: `out-${p.id}`,
+          type: 'out_stock',
+          title: `Sin stock: ${p.name}`,
+          desc: p.campus_name ? `Campus: ${p.campus_name}` : 'Sin campus asignado',
+          time: 'Ahora',
+        })
+      )
+
+      ;(lowStock ?? []).forEach((p) =>
+        list.push({
+          id: `low-${p.id}`,
+          type: 'low_stock',
+          title: `Stock bajo: ${p.name}`,
+          desc: `Quedan ${p.stock} uds.${p.campus_name ? ` · ${p.campus_name}` : ''}`,
+          time: 'Ahora',
+        })
+      )
+
       setNotifs(list)
       setUnread(list.length)
     }
-    loadNotifs()
-    const interval = setInterval(loadNotifs, 60000) // actualizar cada minuto
-    return () => clearInterval(interval)
-  }, [])
 
-  // Cerrar notif al click afuera
+    loadNotifs()
+    const interval = setInterval(loadNotifs, 60000)
+    return () => clearInterval(interval)
+  }, [user])
+
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
@@ -100,33 +129,68 @@ export default function Navbar({ user }: { user: any }) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  // Cmd+K búsqueda
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(s => !s) }
-      if (e.key === 'Escape') { setSearchOpen(false); setNotifOpen(false) }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen((s) => !s)
+      }
+      if (e.key === 'Escape') {
+        setSearchOpen(false)
+        setNotifOpen(false)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Búsqueda en tiempo real
   useEffect(() => {
-    if (!query.trim()) { setResults([]); return }
+    if (!query.trim()) {
+      setResults([])
+      return
+    }
+
     const t = setTimeout(async () => {
       const supabase = createClient()
       const q = query.toLowerCase()
+
       const [{ data: products }, { data: orders }] = await Promise.all([
-        supabase.from('products_with_stock').select('id, name, sku, price, stock')
-          .or(`name.ilike.%${q}%,sku.ilike.%${q}%`).limit(4),
-        supabase.from('orders').select('id, order_number, total, status, notes')
-          .or(`notes.ilike.%${q}%`).limit(3),
+        supabase
+          .from('products_with_stock')
+          .select('id, name, sku, price, stock')
+          .or(`name.ilike.%${q}%,sku.ilike.%${q}%`)
+          .limit(4),
+
+        supabase
+          .from('orders')
+          .select('id, order_number, total, status, notes')
+          .or(`notes.ilike.%${q}%`)
+          .limit(3),
       ])
+
       const r: any[] = []
-      ;(products ?? []).forEach(p => r.push({ type:'product', id:p.id, label:p.name, sub:`SKU: ${p.sku ?? '—'} · Stock: ${p.stock}`, href:`/products/${p.id}` }))
-      ;(orders ?? []).forEach(o => r.push({ type:'order', id:o.id, label:`Orden #${o.order_number}`, sub:o.notes?.replace('Cliente: ','') ?? '—', href:'/orders' }))
+      ;(products ?? []).forEach((p) =>
+        r.push({
+          type: 'product',
+          id: p.id,
+          label: p.name,
+          sub: `SKU: ${p.sku ?? '—'} · Stock: ${p.stock}`,
+          href: `/products/${p.id}`,
+        })
+      )
+      ;(orders ?? []).forEach((o) =>
+        r.push({
+          type: 'order',
+          id: o.id,
+          label: `Orden #${o.order_number}`,
+          sub: o.notes?.replace('Cliente: ', '') ?? '—',
+          href: '/orders',
+        })
+      )
+
       setResults(r)
     }, 250)
+
     return () => clearTimeout(t)
   }, [query])
 
@@ -143,82 +207,128 @@ export default function Navbar({ user }: { user: any }) {
     window.location.href = '/login'
   }
 
-  const initials    = user?.full_name?.split(' ').map((w: string) => w[0]).slice(0,2).join('').toUpperCase() ?? '?'
-  const campusName  = user?.campus?.name ?? null
-  const campusStyle = campusName ? (CAMPUS_COLORS[campusName] ?? 'bg-zinc-700/50 text-zinc-400') : null
+  const initials =
+    user?.full_name
+      ?.split(' ')
+      .map((w: string) => w[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() ?? '?'
+
+  const campusName = user?.campus?.name ?? null
+  const campusStyle = campusName
+    ? CAMPUS_COLORS[campusName] ?? 'bg-zinc-700/50 text-zinc-400'
+    : null
 
   const NOTIF_ICON: Record<string, any> = {
     out_stock: <TrendingDown size={13} className="text-red-400" />,
     low_stock: <AlertTriangle size={13} className="text-orange-400" />,
-    transfer:  <Package size={13} className="text-blue-400" />,
+    transfer: <Package size={13} className="text-blue-400" />,
   }
 
   return (
     <>
-      <header className="flex items-center justify-between px-5 py-3 bg-zinc-950 border-b border-zinc-800/60 shrink-0">
-        <div className="flex items-center gap-3">
-          <button onClick={() => setSearchOpen(true)}
-            className="flex items-center gap-2 bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/60
-                       rounded-xl px-3 py-2 text-xs text-zinc-500 transition w-48">
+      <header className="flex items-center justify-between gap-3 border-b border-zinc-800/60 bg-zinc-950 px-3 py-3 sm:px-4 lg:px-5 shrink-0">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <button
+            onClick={onOpenSidebar}
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 text-zinc-300 transition hover:bg-zinc-800 hover:text-white lg:hidden"
+          >
+            <Menu size={18} />
+          </button>
+
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex h-10 items-center gap-2 rounded-xl border border-zinc-700/60 bg-zinc-800/60 px-3 text-xs text-zinc-500 transition hover:bg-zinc-800 sm:w-56"
+          >
             <Search size={13} />
-            <span>Buscar...</span>
-            <span className="ml-auto bg-zinc-700 text-zinc-500 text-[9px] px-1.5 py-0.5 rounded font-mono">⌘K</span>
+            <span className="truncate">Buscar...</span>
+            <span className="ml-auto hidden rounded bg-zinc-700 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500 sm:block">
+              ⌘K
+            </span>
           </button>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Toggle tema */}
-          <button onClick={toggleTheme} title={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-            className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition text-zinc-400 hover:text-amber-400">
+          <button
+            onClick={toggleTheme}
+            title={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400 transition hover:bg-zinc-700 hover:text-amber-400"
+          >
             {dark ? <Sun size={15} /> : <Moon size={15} />}
           </button>
 
-          {/* Notificaciones */}
           <div className="relative" ref={notifRef}>
-            <button onClick={() => { setNotifOpen(o => !o); setUnread(0) }}
-              className="relative w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition text-zinc-400 hover:text-white">
+            <button
+              onClick={() => {
+                setNotifOpen((o) => !o)
+                setUnread(0)
+              }}
+              className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400 transition hover:bg-zinc-700 hover:text-white"
+            >
               <Bell size={15} />
               {unread > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
                   {unread > 9 ? '9+' : unread}
                 </span>
               )}
             </button>
 
-            {/* Panel notificaciones */}
             {notifOpen && (
-              <div className="absolute right-0 top-10 w-72 bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl overflow-hidden z-50">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+              <div className="absolute right-0 top-12 z-50 w-[300px] max-w-[85vw] overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
                   <span className="text-sm font-semibold text-white">Notificaciones</span>
                   <span className="text-xs text-zinc-500">{notifs.length} alertas</span>
                 </div>
+
                 <div className="max-h-80 overflow-y-auto">
                   {notifs.length === 0 ? (
                     <div className="py-8 text-center">
-                      <Bell size={24} className="text-zinc-700 mx-auto mb-2" />
+                      <Bell size={24} className="mx-auto mb-2 text-zinc-700" />
                       <p className="text-xs text-zinc-600">Todo en orden</p>
                     </div>
-                  ) : notifs.map(n => (
-                    <button key={n.id}
-                      onClick={() => { router.push('/inventory'); setNotifOpen(false) }}
-                      className="w-full flex items-start gap-3 px-4 py-3 hover:bg-zinc-800 transition border-b border-zinc-800/50 last:border-0 text-left">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                        n.type === 'out_stock' ? 'bg-red-500/10' :
-                        n.type === 'low_stock' ? 'bg-orange-500/10' : 'bg-blue-500/10'
-                      }`}>
-                        {NOTIF_ICON[n.type]}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-zinc-200 truncate">{n.title}</p>
-                        <p className="text-[10px] text-zinc-500 mt-0.5">{n.desc}</p>
-                      </div>
-                    </button>
-                  ))}
+                  ) : (
+                    notifs.map((n) => (
+                      <button
+                        key={n.id}
+                        onClick={() => {
+                          router.push('/inventory')
+                          setNotifOpen(false)
+                        }}
+                        className="flex w-full items-start gap-3 border-b border-zinc-800/50 px-4 py-3 text-left transition hover:bg-zinc-800 last:border-0"
+                      >
+                        <div
+                          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                            n.type === 'out_stock'
+                              ? 'bg-red-500/10'
+                              : n.type === 'low_stock'
+                              ? 'bg-orange-500/10'
+                              : 'bg-blue-500/10'
+                          }`}
+                        >
+                          {NOTIF_ICON[n.type]}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium text-zinc-200">
+                            {n.title}
+                          </p>
+                          <p className="mt-0.5 text-[10px] text-zinc-500">{n.desc}</p>
+                        </div>
+                      </button>
+                    ))
+                  )}
                 </div>
+
                 {notifs.length > 0 && (
-                  <div className="px-4 py-2.5 border-t border-zinc-800">
-                    <button onClick={() => { router.push('/inventory'); setNotifOpen(false) }}
-                      className="text-xs text-amber-400 hover:text-amber-300 transition">
+                  <div className="border-t border-zinc-800 px-4 py-2.5">
+                    <button
+                      onClick={() => {
+                        router.push('/inventory')
+                        setNotifOpen(false)
+                      }}
+                      className="text-xs text-amber-400 transition hover:text-amber-300"
+                    >
                       Ver inventario →
                     </button>
                   </div>
@@ -227,76 +337,114 @@ export default function Navbar({ user }: { user: any }) {
             )}
           </div>
 
-          {/* Usuario */}
-          <div className="flex items-center gap-2.5 ml-1">
-            <div className="text-right hidden sm:block">
-              <p className="text-xs font-medium text-white leading-none">{user?.full_name ?? '—'}</p>
-              <div className="flex items-center justify-end gap-1 mt-0.5">
+          <div className="ml-1 flex items-center gap-2.5">
+            <div className="hidden text-right sm:block">
+              <p className="text-xs font-medium leading-none text-white">
+                {user?.full_name ?? '—'}
+              </p>
+              <div className="mt-0.5 flex items-center justify-end gap-1">
                 {campusName && (
-                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${campusStyle}`}>{campusName}</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${campusStyle}`}>
+                    {campusName}
+                  </span>
                 )}
-                <p className="text-[10px] text-zinc-500 capitalize">{user?.role?.replace('_',' ')}</p>
+                <p className="text-[10px] capitalize text-zinc-500">
+                  {user?.role?.replace('_', ' ')}
+                </p>
               </div>
             </div>
-            <div className="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/20">
               <span className="text-xs font-bold text-amber-400">{initials}</span>
             </div>
           </div>
 
-          {/* Logout */}
-          <button onClick={handleLogout}
-            className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-red-500/20 hover:text-red-400 flex items-center justify-center transition text-zinc-500">
+          <button
+            onClick={handleLogout}
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 text-zinc-500 transition hover:bg-red-500/20 hover:text-red-400"
+          >
             <LogOut size={15} />
           </button>
         </div>
       </header>
 
-      {/* Modal búsqueda global */}
       {searchOpen && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:100,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:'80px'}}
-          onClick={e => { if (e.target === e.currentTarget) setSearchOpen(false) }}>
-          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-lg mx-4 overflow-hidden shadow-2xl">
-            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-zinc-800">
-              <Search size={16} className="text-zinc-500 shrink-0" />
-              <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
+        <div
+          className="fixed inset-0 z-[100] flex items-start justify-center bg-black/70 px-4 pt-20"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSearchOpen(false)
+          }}
+        >
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-3.5">
+              <Search size={16} className="shrink-0 text-zinc-500" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
                 placeholder="Buscar productos, órdenes, clientes..."
-                className="flex-1 bg-transparent text-white placeholder-zinc-500 text-sm outline-none" />
-              <button onClick={() => setSearchOpen(false)} className="text-zinc-600 hover:text-zinc-400 transition">
+                className="flex-1 bg-transparent text-sm text-white placeholder-zinc-500 outline-none"
+              />
+              <button
+                onClick={() => setSearchOpen(false)}
+                className="text-zinc-600 transition hover:text-zinc-400"
+              >
                 <X size={16} />
               </button>
             </div>
+
             {results.length > 0 ? (
-              <div className="py-2 max-h-72 overflow-y-auto">
-                {results.map(r => (
-                  <button key={r.id} onClick={() => { router.push(r.href); setSearchOpen(false); setQuery('') }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-800 transition text-left">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs shrink-0 ${
-                      r.type === 'product' ? 'bg-amber-500/10 text-amber-400' : 'bg-blue-500/10 text-blue-400'
-                    }`}>
+              <div className="max-h-72 overflow-y-auto py-2">
+                {results.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => {
+                      router.push(r.href)
+                      setSearchOpen(false)
+                      setQuery('')
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-zinc-800"
+                  >
+                    <div
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs ${
+                        r.type === 'product'
+                          ? 'bg-amber-500/10 text-amber-400'
+                          : 'bg-blue-500/10 text-blue-400'
+                      }`}
+                    >
                       {r.type === 'product' ? '📦' : '🧾'}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-zinc-200 font-medium truncate">{r.label}</p>
-                      <p className="text-xs text-zinc-500 truncate">{r.sub}</p>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-zinc-200">{r.label}</p>
+                      <p className="truncate text-xs text-zinc-500">{r.sub}</p>
                     </div>
                   </button>
                 ))}
               </div>
             ) : query.trim() ? (
-              <div className="py-8 text-center text-zinc-600 text-sm">Sin resultados para "{query}"</div>
+              <div className="py-8 text-center text-sm text-zinc-600">
+                Sin resultados para "{query}"
+              </div>
             ) : (
-              <div className="py-6 px-4">
-                <p className="text-xs text-zinc-600 mb-3">Accesos rápidos</p>
+              <div className="px-4 py-6">
+                <p className="mb-3 text-xs text-zinc-600">Accesos rápidos</p>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    {label:'Punto de Venta', href:'/pos'},
-                    {label:'Inventario', href:'/inventory'},
-                    {label:'Órdenes', href:'/orders'},
-                    {label:'Reportes', href:'/reports'},
-                    {label:'Cierre de caja', href:'/close-day'},
-                  ].map(l => (
-                    <button key={l.href} onClick={() => { router.push(l.href); setSearchOpen(false) }}
-                      className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-1.5 rounded-lg transition">
+                    { label: 'Punto de Venta', href: '/pos' },
+                    { label: 'Inventario', href: '/inventory' },
+                    { label: 'Órdenes', href: '/orders' },
+                    { label: 'Reportes', href: '/reports' },
+                    { label: 'Cierre de caja', href: '/close-day' },
+                  ].map((l) => (
+                    <button
+                      key={l.href}
+                      onClick={() => {
+                        router.push(l.href)
+                        setSearchOpen(false)
+                      }}
+                      className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs text-zinc-400 transition hover:bg-zinc-700"
+                    >
                       {l.label}
                     </button>
                   ))}

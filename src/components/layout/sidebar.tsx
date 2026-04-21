@@ -16,6 +16,7 @@ import {
   Calculator,
   MapPin,
   Tags,
+  X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -74,9 +75,13 @@ const ROLE_CONFIG: Record<
 export default function Sidebar({
   role,
   campusName,
+  mobileOpen,
+  onClose,
 }: {
   role: Role
   campusName?: string
+  mobileOpen?: boolean
+  onClose?: () => void
 }) {
   const pathname = usePathname()
   const visible = NAV_ITEMS.filter((i) => i.roles.includes(role))
@@ -84,32 +89,41 @@ export default function Sidebar({
   const config = ROLE_CONFIG[role] ?? ROLE_CONFIG.voluntario
 
   return (
-    <aside className="w-52 shrink-0 overflow-y-auto border-r border-zinc-800/60 bg-zinc-950 px-2.5 py-5">
-      <div className="mb-5 flex items-center gap-2.5 px-2.5">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500">
-          <span className="text-xs font-black text-zinc-950">A</span>
+    <aside className="flex h-full w-[280px] shrink-0 flex-col overflow-y-auto border-r border-zinc-800/60 bg-zinc-950 px-3 py-5 lg:w-56">
+      <div className="mb-5 flex items-center justify-between gap-3 px-2">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500">
+            <span className="text-xs font-black text-zinc-950">A</span>
+          </div>
+          <div>
+            <p className="text-sm font-bold leading-none text-white">ARM Merch</p>
+            <p className="mt-0.5 text-[10px] text-zinc-600">Sistema de Merch</p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-bold leading-none text-white">ARM Merch</p>
-          <p className="mt-0.5 text-[9px] text-zinc-600">Sistema de Merch</p>
-        </div>
+
+        <button
+          onClick={onClose}
+          className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-900 text-zinc-400 transition hover:bg-zinc-800 hover:text-white lg:hidden"
+        >
+          <X size={16} />
+        </button>
       </div>
 
-      <div className={`mx-2.5 mb-4 rounded-xl border px-3 py-2.5 ${config.color}`}>
+      <div className={`mx-2 mb-4 rounded-2xl border px-3 py-3 ${config.color}`}>
         <p className="text-[10px] font-bold uppercase tracking-widest">{config.label}</p>
-        <p className="mt-0.5 text-[9px] opacity-70">
+        <p className="mt-1 text-[10px] opacity-70">
           {role === 'admin' && campusName ? campusName : config.description}
         </p>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-0.5">
+      <nav className="flex flex-1 flex-col gap-1">
         {sections.map((section) => {
           const items = visible.filter((i) => (i.section ?? '') === section)
 
           return (
-            <div key={section} className="mb-1">
+            <div key={section} className="mb-2">
               {section && (
-                <p className="mb-1 mt-2 px-2.5 text-[9px] font-semibold uppercase tracking-widest text-zinc-600">
+                <p className="mb-2 mt-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">
                   {section}
                 </p>
               )}
@@ -123,11 +137,12 @@ export default function Sidebar({
                   <Link
                     key={item.href}
                     href={item.href}
+                    onClick={onClose}
                     className={clsx(
-                      'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-all',
+                      'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all',
                       active
                         ? 'bg-amber-500/10 font-semibold text-amber-400'
-                        : 'text-zinc-500 hover:bg-zinc-800/60 hover:text-white'
+                        : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-white'
                     )}
                   >
                     {item.icon}
