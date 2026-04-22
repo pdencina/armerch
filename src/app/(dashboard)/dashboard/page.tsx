@@ -304,7 +304,7 @@ export default function DashboardPage() {
       cur.qty += Number(item.quantity ?? 0)
       cur.revenue += Number(item.quantity ?? 0) * Number(item.unit_price ?? 0)
     })
-    return [...map.values()].sort((a, b) => b.qty - a.qty).slice(0, 6)
+    return Array.from(map.values()).sort((a, b) => b.qty - a.qty).slice(0, 6)
   }, [orderItems])
 
   // Campus ranking
@@ -317,7 +317,7 @@ export default function DashboardPage() {
       cur.total += Number(o.total ?? 0)
       cur.count += 1
     })
-    return [...map.values()].sort((a, b) => b.total - a.total)
+    return Array.from(map.values()).sort((a, b) => b.total - a.total)
   }, [orders, campusMap])
 
   // Payment methods
@@ -327,8 +327,8 @@ export default function DashboardPage() {
       const m = o.payment_method || 'otro'
       map.set(m, (map.get(m) || 0) + Number(o.total ?? 0))
     })
-    const total = [...map.values()].reduce((s, v) => s + v, 0)
-    return [...map.entries()]
+    const total = Array.from(map.values()).reduce((s, v) => s + v, 0)
+    return Array.from(map.entries())
       .map(([name, amount]) => ({ name, amount, pct: total > 0 ? (amount / total) * 100 : 0 }))
       .sort((a, b) => b.amount - a.amount)
   }, [orders])
@@ -349,7 +349,7 @@ export default function DashboardPage() {
         cur.total += Number(o.total ?? 0)
         cur.count += 1
       })
-    return [...map.values()].sort((a, b) => b.total - a.total).slice(0, 5)
+    return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 5)
   }, [orders, sellerMap, now])
 
   const maxCampus = Math.max(...campusSales.map(c => c.total), 1)
