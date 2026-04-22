@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { Search, Package2 } from 'lucide-react'
 import { useCart } from '@/lib/hooks/use-cart'
@@ -61,6 +61,7 @@ export default function ProductGrid({ products, categories }: Props) {
   const { addItem, items } = useCart()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
@@ -74,6 +75,63 @@ export default function ProductGrid({ products, categories }: Props) {
     })
   }, [products, search, category])
 
+  function addProduct(product: Product) {
+    if ((product.stock ?? 0) <= 0) return
+
+    addItem({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      image_url: product.image_url,
+      stock: product.stock ?? 0,
+    })
+
+    playAddSound()
+  }
+
+  useEffect(() => {
+    const input = inputRef.current
+    if (!input) return
+
+    const t = setTimeout(() => {
+      input.focus()
+      input.select()
+    }, 120)
+
+    return () => clearTimeout(t)
+  }, [])
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName?.toLowerCase()
+
+      if (e.key === '/') {
+        if (tag !== 'input' && tag !== 'textarea' && !target?.isContentEditable) {
+          e.preventDefault()
+          inputRef.current?.focus()
+        }
+      }
+
+      if (e.key === 'Escape') {
+        if (document.activeElement === inputRef.current) {
+          setSearch('')
+          inputRef.current?.blur()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' && filtered.length > 0) {
+      e.preventDefault()
+      addProduct(filtered[0])
+    }
+  }
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="border-b border-zinc-800 px-4 py-3">
@@ -83,9 +141,11 @@ export default function ProductGrid({ products, categories }: Props) {
             className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
           />
           <input
+            ref={inputRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre o SKU..."
+            onKeyDown={handleSearchKeyDown}
+            placeholder="Buscar por nombre o SKU... ( / )"
             className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 pl-10 pr-3 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-slate-400"
           />
         </div>
@@ -133,18 +193,7 @@ export default function ProductGrid({ products, categories }: Props) {
               return (
                 <button
                   key={product.id}
-                  onClick={() => {
-                    if (!outOfStock) {
-                      addItem({
-                        id: product.id,
-                        name: product.name,
-                        price: product.price,
-                        image_url: product.image_url,
-                        stock: product.stock ?? 0,
-                      })
-                      playAddSound()
-                    }
-                  }}
+                  onClick={() => addProduct(product)}
                   disabled={outOfStock}
                   className={`group relative flex flex-col rounded-2xl border p-2 text-left transition-all ${
                     outOfStock

@@ -48,10 +48,10 @@ export default function Cart() {
   const [submitting, setSubmitting] = useState(false)
 
   const paymentOptions = [
-    { key: 'efectivo', label: 'Efectivo', icon: Banknote },
-    { key: 'transferencia', label: 'Transfer.', icon: Landmark },
-    { key: 'debito', label: 'Débito', icon: CreditCard },
-    { key: 'credito', label: 'Crédito', icon: Wallet },
+    { key: 'efectivo', label: 'Efectivo', icon: Banknote, shortcut: '1' },
+    { key: 'transferencia', label: 'Transfer.', icon: Landmark, shortcut: '2' },
+    { key: 'debito', label: 'Débito', icon: CreditCard, shortcut: '3' },
+    { key: 'credito', label: 'Crédito', icon: Wallet, shortcut: '4' },
   ]
 
   const canSubmit = useMemo(() => {
@@ -149,6 +149,11 @@ export default function Cart() {
       const tag = target?.tagName?.toLowerCase()
 
       if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+
+      if (e.key === '1') setPaymentMethod('efectivo')
+      if (e.key === '2') setPaymentMethod('transferencia')
+      if (e.key === '3') setPaymentMethod('debito')
+      if (e.key === '4') setPaymentMethod('credito')
 
       if (e.key === 'Enter' && canSubmit) {
         e.preventDefault()
@@ -312,14 +317,19 @@ export default function Cart() {
                   <button
                     key={option.key}
                     onClick={() => setPaymentMethod(option.key)}
-                    className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold transition ${
+                    className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-xs font-bold transition ${
                       active
                         ? 'border-slate-300 bg-slate-200 text-black'
                         : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800'
                     }`}
                   >
-                    <Icon size={13} />
-                    {option.label}
+                    <span className="flex items-center gap-2">
+                      <Icon size={13} />
+                      {option.label}
+                    </span>
+                    <span className="rounded bg-black/10 px-1.5 py-0.5 text-[10px]">
+                      {option.shortcut}
+                    </span>
                   </button>
                 )
               })}
