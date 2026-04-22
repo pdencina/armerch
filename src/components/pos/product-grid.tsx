@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Package2, SlidersHorizontal, X, Zap } from 'lucide-react'
+import { Search, Package2, X, Zap } from 'lucide-react'
 import { useCart } from '@/lib/hooks/use-cart'
 import { useBarcode } from '@/lib/hooks/use-barcode'
 

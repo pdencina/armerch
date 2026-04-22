@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
-import { useCart, type Promotion } from '@/lib/hooks/use-cart'
+import { useCart, type Promotion, type CartItem } from '@/lib/hooks/use-cart'
 import {
   ShoppingCart,
   Trash2,
@@ -82,7 +82,7 @@ function CartItemRow({
   onRemove,
   onDiscountChange,
 }: {
-  item: ReturnType<typeof useCart>['items'][number]
+  item: CartItem
   onUpdateQty: (qty: number) => void
   onRemove: () => void
   onDiscountChange: (pct: number) => void
@@ -335,8 +335,8 @@ export default function Cart() {
       if (!res.ok) throw new Error(data?.error || 'Error al registrar la venta.')
 
       setCreatedOrder({
-        id: data.id,
-        number: data.order_number ?? data.id,
+        id: data.order_id,
+        number: data.order_number ?? data.order_id,
         total: total(),
         emailSent: data.email_sent,
       })
@@ -703,7 +703,6 @@ export default function Cart() {
           orderNumber={createdOrder.number}
           total={createdOrder.total}
           emailSent={createdOrder.emailSent}
-          onClose={() => setSuccessOpen(false)}
           onNewSale={() => setSuccessOpen(false)}
         />
       )}
