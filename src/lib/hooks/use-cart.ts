@@ -33,6 +33,7 @@ interface CartStore {
   items: CartItem[]
   paymentMethod: string
   globalDiscount: number        // descuento fijo global en CLP
+  discount: number              // alias de globalDiscount (compatibilidad con checkout-modal)
   appliedPromo: Promotion | null
   clientName: string
   clientEmail: string
@@ -70,6 +71,7 @@ export const useCart = create<CartStore>()(
       items: [],
       paymentMethod: 'efectivo',
       globalDiscount: 0,
+      discount: 0,              // alias de globalDiscount
       appliedPromo: null,
       clientName: '',
       clientEmail: '',
@@ -132,6 +134,7 @@ export const useCart = create<CartStore>()(
         set({
           items: [],
           globalDiscount: 0,
+          discount: 0,
           appliedPromo: null,
           clientName: '',
           clientEmail: '',
@@ -139,7 +142,7 @@ export const useCart = create<CartStore>()(
         }),
 
       setPaymentMethod: (method) => set({ paymentMethod: method }),
-      setGlobalDiscount: (amount) => set({ globalDiscount: Math.max(0, amount) }),
+      setGlobalDiscount: (amount) => set({ globalDiscount: Math.max(0, amount), discount: Math.max(0, amount) }),
 
       applyPromo: (promo) =>
         set((state) => {
