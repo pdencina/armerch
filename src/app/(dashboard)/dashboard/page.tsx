@@ -414,7 +414,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <StatCard
           title="Hoy"
-          value={fmtShort(metrics.totalToday)}
+          value={fmt(metrics.totalToday)}
           sub={`${metrics.todayCount} órdenes`}
           trend={metrics.dayGrowth}
           sparkData={spark7}
@@ -422,25 +422,25 @@ export default function DashboardPage() {
         />
         <StatCard
           title="7 días"
-          value={fmtShort(metrics.totalWeek)}
+          value={fmt(metrics.totalWeek)}
           sub={`${metrics.weekCount} órdenes`}
           accent="blue"
         />
         <StatCard
           title="Mes actual"
-          value={fmtShort(metrics.totalMonth)}
+          value={fmt(metrics.totalMonth)}
           sub={`${metrics.monthCount} órdenes`}
           trend={metrics.growth}
           accent="green"
         />
         <StatCard
           title="Mes anterior"
-          value={fmtShort(metrics.totalLastMonth)}
+          value={fmt(metrics.totalLastMonth)}
           accent="purple"
         />
         <StatCard
           title="Ticket promedio"
-          value={fmtShort(metrics.avgTicket)}
+          value={fmt(metrics.avgTicket)}
           sub="Mes actual"
           accent="amber"
         />
@@ -455,7 +455,7 @@ export default function DashboardPage() {
           <p className="mt-1 text-xs text-zinc-500">vs mes anterior</p>
           {metrics.totalDiscounts > 0 && (
             <p className="mt-2 text-[10px] text-green-400">
-              {fmtShort(metrics.totalDiscounts)} en descuentos
+              {fmt(metrics.totalDiscounts)} en descuentos
             </p>
           )}
         </div>
@@ -469,7 +469,7 @@ export default function DashboardPage() {
             <p className="mt-0.5 text-xs text-zinc-500">Ingresos diarios acumulados</p>
           </div>
           <div className="rounded-xl bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-400">
-            {fmtShort(metrics.totalMonth)} este mes
+            {fmt(metrics.totalMonth)} este mes
           </div>
         </div>
         <ResponsiveContainer width="100%" height={200}>
