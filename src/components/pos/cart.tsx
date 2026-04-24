@@ -11,17 +11,10 @@ import {
   Landmark,
   Banknote,
   Wallet,
-  Tag,
-  ChevronDown,
-  ChevronUp,
   X,
-  Ticket,
-  CheckCircle2,
-  AlertCircle,
   Receipt,
   Minus,
   Plus,
-  Percent,
 } from 'lucide-react'
 import SaleSuccessModal from '@/components/pos/sale-success-modal'
 
@@ -33,188 +26,6 @@ const fmt = (n: number) =>
     maximumFractionDigits: 0,
   }).format(n)
 
-// Promociones de ejemplo (en producción vendrían de Supabase)
-const SAMPLE_PROMOS: Promotion[] = [
-  { id: '1', code: 'DESCUENTO10', label: '10% descuento', type: 'percent', value: 10, min_amount: 5000 },
-  { id: '2', code: 'PROMO2000', label: '$2.000 off', type: 'fixed', value: 2000, min_amount: 10000 },
-  { id: '3', code: 'ARM20', label: '20% ARM especial', type: 'percent', value: 20 },
-]
-
-// ─── sub-componentes ────────────────────────────────────────────────────────
-
-function PaymentPill({
-  option,
-  active,
-  onClick,
-  shortcut,
-}: {
-  option: { key: string; label: string; icon: React.ElementType }
-  active: boolean
-  onClick: () => void
-  shortcut: string
-}) {
-  const Icon = option.icon
-  return (
-    <button
-      onClick={onClick}
-      className={`relative flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-2.5 text-xs font-semibold transition-all duration-200 ${
-        active
-          ? 'border-amber-500/60 bg-amber-500/20 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
-          : 'border-white/8 bg-white/[0.03] text-zinc-400 hover:border-white/15 hover:bg-white/[0.06] hover:text-zinc-200'
-      }`}
-    >
-      <Icon size={16} />
-      <span className="leading-none">{option.label}</span>
-      <span
-        className={`absolute right-1.5 top-1.5 text-[9px] font-bold ${
-          active ? 'text-amber-500/70' : 'text-zinc-600'
-        }`}
-      >
-        {shortcut}
-      </span>
-    </button>
-  )
-}
-
-function CartItemRow({
-  item,
-  onUpdateQty,
-  onRemove,
-  onDiscountChange,
-}: {
-  item: CartItem
-  onUpdateQty: (qty: number) => void
-  onRemove: () => void
-  onDiscountChange: (pct: number) => void
-}) {
-  const [showDiscount, setShowDiscount] = useState(false)
-  const [discountInput, setDiscountInput] = useState(String(item.discount_pct))
-
-  const lineTotal =
-    item.unit_price * item.quantity * (1 - item.discount_pct / 100)
-
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: -8, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 30, scale: 0.95 }}
-      transition={{ duration: 0.2 }}
-      className="rounded-2xl border border-white/6 bg-white/[0.025] p-3"
-    >
-      {/* fila superior: nombre + eliminar */}
-      <div className="flex items-start gap-2">
-        {/* imagen/emoji */}
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.05] text-xl">
-          {item.product.image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={item.product.image_url}
-              alt={item.product.name}
-              className="h-10 w-10 rounded-xl object-cover"
-            />
-          ) : (
-            '📦'
-          )}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold leading-tight text-white">
-            {item.product.name}
-          </p>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            {fmt(item.unit_price)} c/u
-            {item.discount_pct > 0 && (
-              <span className="ml-1.5 rounded-full bg-green-500/15 px-1.5 py-0.5 text-[10px] font-bold text-green-400">
-                −{item.discount_pct}%
-              </span>
-            )}
-          </p>
-        </div>
-
-        <button
-          onClick={onRemove}
-          className="rounded-lg p-1 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
-          aria-label="Quitar"
-        >
-          <Trash2 size={13} />
-        </button>
-      </div>
-
-      {/* fila inferior: controles */}
-      <div className="mt-2.5 flex items-center justify-between gap-2">
-        {/* stepper cantidad */}
-        <div className="flex items-center gap-1 rounded-xl bg-black/30 px-1.5 py-1">
-          <button
-            onClick={() => onUpdateQty(item.quantity - 1)}
-            className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/5 text-white transition hover:bg-white/10"
-          >
-            <Minus size={11} />
-          </button>
-          <span className="w-7 text-center text-sm font-bold text-white">
-            {item.quantity}
-          </span>
-          <button
-            onClick={() => onUpdateQty(item.quantity + 1)}
-            disabled={item.quantity >= item.product.stock}
-            className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/5 text-white transition hover:bg-white/10 disabled:opacity-30"
-          >
-            <Plus size={11} />
-          </button>
-        </div>
-
-        {/* descuento por ítem */}
-        <button
-          onClick={() => setShowDiscount((v) => !v)}
-          className={`flex items-center gap-1 rounded-xl px-2 py-1 text-xs transition ${
-            item.discount_pct > 0
-              ? 'bg-green-500/15 text-green-400'
-              : 'bg-white/5 text-zinc-500 hover:text-zinc-300'
-          }`}
-        >
-          <Percent size={11} />
-          {item.discount_pct > 0 ? `${item.discount_pct}%` : 'Desc.'}
-        </button>
-
-        {/* total línea */}
-        <span className="text-sm font-bold text-white">{fmt(lineTotal)}</span>
-      </div>
-
-      {/* input descuento inline */}
-      <AnimatePresence>
-        {showDiscount && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="overflow-hidden"
-          >
-            <div className="mt-2 flex items-center gap-2 rounded-xl bg-black/20 px-3 py-2">
-              <Percent size={12} className="text-zinc-500" />
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={discountInput}
-                onChange={(e) => setDiscountInput(e.target.value)}
-                onBlur={() => {
-                  const v = Math.min(100, Math.max(0, Number(discountInput) || 0))
-                  onDiscountChange(v)
-                  setDiscountInput(String(v))
-                }}
-                className="w-16 bg-transparent text-sm text-white outline-none"
-                placeholder="0"
-              />
-              <span className="text-xs text-zinc-500">% de descuento en este ítem</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  )
-}
-
 // ─── componente principal ───────────────────────────────────────────────────
 
 export default function Cart() {
@@ -223,11 +34,7 @@ export default function Cart() {
     items,
     paymentMethod,
     setPaymentMethod,
-    globalDiscount,
     setGlobalDiscount,
-    appliedPromo,
-    applyPromo,
-    removePromo,
     clientName,
     clientEmail,
     notes,
@@ -245,11 +52,6 @@ export default function Cart() {
   } = useCart()
 
   // ── UI state ──
-  const [promoCode, setPromoCode] = useState('')
-  const [promoError, setPromoError] = useState('')
-  const [promoSuccess, setPromoSuccess] = useState('')
-  const [showGlobalDiscount, setShowGlobalDiscount] = useState(false)
-  const [globalDiscountInput, setGlobalDiscountInput] = useState('')
   const [showNotes, setShowNotes] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
@@ -268,26 +70,6 @@ export default function Cart() {
     { key: 'debito', label: 'Débito', icon: CreditCard },
     { key: 'credito', label: 'Crédito', icon: Wallet },
   ]
-
-  // ── aplicar cupón ──
-  function handleApplyPromo() {
-    setPromoError('')
-    setPromoSuccess('')
-    const found = SAMPLE_PROMOS.find(
-      (p) => p.code.toLowerCase() === promoCode.trim().toLowerCase()
-    )
-    if (!found) {
-      setPromoError('Código no válido.')
-      return
-    }
-    if (found.min_amount && subtotal() < found.min_amount) {
-      setPromoError(`Monto mínimo: ${fmt(found.min_amount)}`)
-      return
-    }
-    applyPromo(found)
-    setPromoSuccess(`¡${found.label} aplicado!`)
-    setPromoCode('')
-  }
 
   // ── confirmar venta ──
   async function handleConfirmSale() {
@@ -325,8 +107,7 @@ export default function Cart() {
           client_name: clientName.trim(),
           client_email: clientEmail.trim() || null,
           payment_method: paymentMethod,
-          discount: promoDiscount() + globalDiscount,
-          promo_code: appliedPromo?.code ?? null,
+          discount: 0,
           notes: notes.trim() || null,
         }),
       })
@@ -364,9 +145,6 @@ export default function Cart() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [canSubmit, paymentMethod, items.length, clientName])
 
-  // ── contadores de ahorro ──
-  const savings = promoDiscount() + globalDiscount
-  const savingsPct = subtotal() > 0 ? Math.round((savings / subtotal()) * 100) : 0
 
   // ─── render ───────────────────────────────────────────────────────────────
   return (
@@ -442,124 +220,6 @@ export default function Cart() {
 
           {items.length > 0 && (
             <div className="space-y-4 px-4 pb-6">
-
-              {/* RESUMEN DE AHORRO */}
-              <AnimatePresence>
-                {savings > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="rounded-xl border border-green-500/20 bg-green-500/8 p-3"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Tag size={13} className="text-green-400" />
-                      <span className="text-xs font-semibold text-green-400">
-                        Estás ahorrando {fmt(savings)} ({savingsPct}%)
-                      </span>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* CUPÓN DE DESCUENTO */}
-              <div className="rounded-2xl border border-white/6 bg-white/[0.02] p-3">
-                <div className="mb-2 flex items-center gap-1.5">
-                  <Ticket size={13} className="text-zinc-400" />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                    Cupón de descuento
-                  </span>
-                </div>
-
-                {appliedPromo ? (
-                  <div className="flex items-center justify-between rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 size={14} className="text-green-400" />
-                      <span className="text-sm font-semibold text-green-300">
-                        {appliedPromo.code}
-                      </span>
-                      <span className="text-xs text-green-500">{appliedPromo.label}</span>
-                    </div>
-                    <button onClick={removePromo} className="text-zinc-500 hover:text-red-400">
-                      <X size={14} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <input
-                      value={promoCode}
-                      onChange={(e) => { setPromoCode(e.target.value); setPromoError(''); setPromoSuccess('') }}
-                      onKeyDown={(e) => e.key === 'Enter' && handleApplyPromo()}
-                      placeholder="Código de cupón"
-                      className="flex-1 rounded-xl border border-white/8 bg-black/20 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-amber-500/40"
-                    />
-                    <button
-                      onClick={handleApplyPromo}
-                      className="rounded-xl bg-amber-500/20 px-3 py-2 text-xs font-bold text-amber-400 transition hover:bg-amber-500/30"
-                    >
-                      Aplicar
-                    </button>
-                  </div>
-                )}
-
-                {promoError && (
-                  <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400">
-                    <AlertCircle size={11} /> {promoError}
-                  </p>
-                )}
-                {promoSuccess && (
-                  <p className="mt-1.5 flex items-center gap-1 text-xs text-green-400">
-                    <CheckCircle2 size={11} /> {promoSuccess}
-                  </p>
-                )}
-              </div>
-
-              {/* DESCUENTO MANUAL GLOBAL */}
-              <div>
-                <button
-                  onClick={() => setShowGlobalDiscount((v) => !v)}
-                  className="flex w-full items-center justify-between rounded-xl border border-white/6 bg-white/[0.02] px-3 py-2.5 text-xs text-zinc-400 transition hover:border-white/10"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Percent size={12} />
-                    Descuento manual
-                    {globalDiscount > 0 && (
-                      <span className="rounded-full bg-amber-500/20 px-1.5 text-amber-400">
-                        −{fmt(globalDiscount)}
-                      </span>
-                    )}
-                  </span>
-                  {showGlobalDiscount ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                </button>
-
-                <AnimatePresence>
-                  {showGlobalDiscount && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.18 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="mt-2 flex items-center gap-2 rounded-xl border border-white/6 bg-black/20 px-3 py-2">
-                        <span className="text-xs text-zinc-500">$</span>
-                        <input
-                          type="number"
-                          min={0}
-                          value={globalDiscountInput}
-                          onChange={(e) => setGlobalDiscountInput(e.target.value)}
-                          onBlur={() => {
-                            const v = Math.max(0, Number(globalDiscountInput) || 0)
-                            setGlobalDiscount(v)
-                          }}
-                          className="flex-1 bg-transparent text-sm text-white outline-none"
-                          placeholder="0"
-                        />
-                        <span className="text-xs text-zinc-500">CLP</span>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
 
               {/* DATOS DEL CLIENTE */}
@@ -636,20 +296,8 @@ export default function Cart() {
                   <span>{fmt(subtotal())}</span>
                 </div>
 
-                {promoDiscount() > 0 && (
-                  <div className="flex justify-between text-sm text-green-400">
-                    <span className="flex items-center gap-1">
-                      <Tag size={11} /> {appliedPromo?.code}
-                    </span>
-                    <span>−{fmt(promoDiscount())}</span>
-                  </div>
                 )}
 
-                {globalDiscount > 0 && (
-                  <div className="flex justify-between text-sm text-green-400">
-                    <span>Descuento manual</span>
-                    <span>−{fmt(globalDiscount)}</span>
-                  </div>
                 )}
 
                 <div className="border-t border-white/6 pt-2 flex items-end justify-between">
