@@ -400,10 +400,6 @@ export default function Cart() {
                   <span>{fmt(subtotal())}</span>
                 </div>
 
-                )}
-
-                )}
-
                 <div className="border-t border-white/6 pt-2 flex items-end justify-between">
                   <span className="text-zinc-300 text-sm">Total a cobrar</span>
                   <motion.span
