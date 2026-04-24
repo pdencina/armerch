@@ -16,6 +16,7 @@ interface Product {
   low_stock_alert: number | null
   category_id: string | null
   sku: string | null
+  has_sizes?: boolean | null
 }
 
 interface Props {
