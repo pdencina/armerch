@@ -100,6 +100,41 @@ function CartItemRow({
   )
 }
 
+// ─── PaymentPill ────────────────────────────────────────────────────────────
+function PaymentPill({
+  option,
+  active,
+  onClick,
+  shortcut,
+}: {
+  option: { key: string; label: string; icon: React.ElementType }
+  active: boolean
+  onClick: () => void
+  shortcut: string
+}) {
+  const Icon = option.icon
+  return (
+    <button
+      onClick={onClick}
+      className={`relative flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-2.5 text-xs font-semibold transition-all duration-200 ${
+        active
+          ? 'border-amber-500/60 bg-amber-500/20 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
+          : 'border-white/8 bg-white/[0.03] text-zinc-400 hover:border-white/15 hover:bg-white/[0.06] hover:text-zinc-200'
+      }`}
+    >
+      <Icon size={16} />
+      <span className="leading-none">{option.label}</span>
+      <span
+        className={`absolute right-1.5 top-1.5 text-[9px] font-bold ${
+          active ? 'text-amber-500/70' : 'text-zinc-600'
+        }`}
+      >
+        {shortcut}
+      </span>
+    </button>
+  )
+}
+
 // ─── componente principal ───────────────────────────────────────────────────
 
 export default function Cart() {
