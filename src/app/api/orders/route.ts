@@ -211,26 +211,25 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Actualizar stock vía trigger ──
-    // El trigger update_stock_on_movement descuenta inventory automáticamente
-    // al insertar en inventory_movements. NO actualizar inventory manualmente
-    // para evitar doble deducción.
-    for (const item of normalizedItems) {
-      const { error: movementError } = await adminClient
-        .from('inventory_movements')
-        .insert({
-          product_id: item.product_id,
-          campus_id: sellingCampusId,
-          type: 'salida',
-          quantity: item.quantity,
-          notes: `Venta ${createdOrder.order_number}`,
-          created_by: profile.id,
-        })
+    // Si es pedido pendiente NO descontar stock — se descuenta al entregar.
+    if (deliveryStatus !== 'pending') {
+      for (const item of normalizedItems) {
+        const { error: movementError } = await adminClient
+          .from('inventory_movements')
+          .insert({
+            product_id: item.product_id,
+            campus_id: sellingCampusId,
+            type: 'salida',
+            quantity: item.quantity,
+            notes: `Venta ${createdOrder.order_number}`,
+            created_by: profile.id,
+          })
 
-      if (movementError) {
-        return NextResponse.json({ error: movementError.message }, { status: 400 })
+        if (movementError) {
+          return NextResponse.json({ error: movementError.message }, { status: 400 })
+        }
       }
     }
-    } // end if !pending delivery
 
     // ── Email con Resend ──
     let emailSent = false
