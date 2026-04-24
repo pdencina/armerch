@@ -2,91 +2,102 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import {
-  LayoutDashboard,
-  ShoppingCart,
-  Package,
-  BarChart3,
-  Users,
-  ClipboardList,
-  ArrowLeftRight,
-  Receipt,
-  ArrowRightLeft,
-  User,
-  Calculator,
-  MapPin,
-  Tags,
-  X,
+  LayoutDashboard, ShoppingCart, Package, BarChart3, Users,
+  ClipboardList, ArrowLeftRight, Receipt, ArrowRightLeft,
+  User, Calculator, MapPin, Tags, X, Layers,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
 type Role = 'super_admin' | 'admin' | 'voluntario'
 
 interface NavItem {
-  label: string
-  href: string
-  icon: React.ReactNode
-  roles: Role[]
-  section?: string
+  label:     string
+  href:      string
+  icon:      React.ReactNode
+  roles:     Role[]
+  moduleKey: string | null  // null = siempre visible (dashboard, perfil)
+  section?:  string
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard size={16} />, roles: ['voluntario', 'admin', 'super_admin'] },
+  { label: 'Dashboard',      href: '/dashboard',            icon: <LayoutDashboard size={16} />, roles: ['voluntario', 'admin', 'super_admin'], moduleKey: null },
 
-  { label: 'Punto de Venta', href: '/pos', icon: <ShoppingCart size={16} />, roles: ['voluntario', 'admin', 'super_admin'], section: 'Ventas' },
-  { label: 'Órdenes', href: '/orders', icon: <Receipt size={16} />, roles: ['voluntario', 'admin', 'super_admin'] },
+  { label: 'Punto de Venta', href: '/pos',                  icon: <ShoppingCart size={16} />,   roles: ['voluntario', 'admin', 'super_admin'], moduleKey: 'pos',        section: 'Ventas' },
+  { label: 'Órdenes',        href: '/orders',               icon: <Receipt size={16} />,        roles: ['voluntario', 'admin', 'super_admin'], moduleKey: 'orders' },
 
-  { label: 'Inventario', href: '/inventory', icon: <Package size={16} />, roles: ['admin', 'super_admin'], section: 'Inventario' },
-  { label: 'Movimientos', href: '/inventory/movements', icon: <ArrowLeftRight size={16} />, roles: ['admin', 'super_admin'] },
-  { label: 'Transferencias', href: '/transfers', icon: <ArrowRightLeft size={16} />, roles: ['super_admin'] },
+  { label: 'Inventario',     href: '/inventory',            icon: <Package size={16} />,        roles: ['admin', 'super_admin'],               moduleKey: 'inventory',  section: 'Inventario' },
+  { label: 'Movimientos',    href: '/inventory/movements',  icon: <ArrowLeftRight size={16} />, roles: ['admin', 'super_admin'],               moduleKey: 'movements' },
+  { label: 'Transferencias', href: '/transfers',            icon: <ArrowRightLeft size={16} />, roles: ['super_admin'],                        moduleKey: null },
 
-  { label: 'Productos', href: '/products', icon: <ClipboardList size={16} />, roles: ['admin', 'super_admin'], section: 'Gestión' },
-  { label: 'Reportes', href: '/reports', icon: <BarChart3 size={16} />, roles: ['admin', 'super_admin'] },
-  { label: 'Cierre de caja', href: '/close-day', icon: <Calculator size={16} />, roles: ['admin', 'super_admin'] },
+  { label: 'Productos',      href: '/products',             icon: <ClipboardList size={16} />,  roles: ['admin', 'super_admin'],               moduleKey: 'products',   section: 'Gestión' },
+  { label: 'Reportes',       href: '/reports',              icon: <BarChart3 size={16} />,      roles: ['admin', 'super_admin'],               moduleKey: 'reports' },
+  { label: 'Cierre de caja', href: '/close-day',            icon: <Calculator size={16} />,     roles: ['admin', 'super_admin'],               moduleKey: 'close_day' },
 
-  { label: 'Usuarios', href: '/settings/users', icon: <Users size={16} />, roles: ['super_admin'], section: 'Configuración' },
-  { label: 'Campus', href: '/settings/campus', icon: <MapPin size={16} />, roles: ['super_admin'] },
-  { label: 'Categorías', href: '/settings/categories', icon: <Tags size={16} />, roles: ['super_admin'] },
+  { label: 'Usuarios',       href: '/settings/users',       icon: <Users size={16} />,          roles: ['super_admin'],                        moduleKey: null,         section: 'Configuración' },
+  { label: 'Campus',         href: '/settings/campus',      icon: <MapPin size={16} />,         roles: ['super_admin'],                        moduleKey: null },
+  { label: 'Categorías',     href: '/settings/categories',  icon: <Tags size={16} />,           roles: ['super_admin'],                        moduleKey: 'categories' },
+  { label: 'Módulos',        href: '/settings/modules',     icon: <Layers size={16} />,         roles: ['super_admin'],                        moduleKey: null },
 
-  { label: 'Mi perfil', href: '/profile', icon: <User size={16} />, roles: ['voluntario', 'admin', 'super_admin'], section: 'Mi cuenta' },
+  { label: 'Mi perfil',      href: '/profile',              icon: <User size={16} />,           roles: ['voluntario', 'admin', 'super_admin'], moduleKey: null,         section: 'Mi cuenta' },
 ]
 
-const ROLE_CONFIG: Record<
-  Role,
-  { label: string; color: string; description: string }
-> = {
-  super_admin: {
-    label: 'Super Admin',
-    description: 'Acceso global · Todos los campus',
-    color: 'bg-[#1B2028] text-[#B7C6F9] border-[#273041]',
-  },
-  admin: {
-    label: 'Admin Campus',
-    description: 'Pastor · Gestión de sede',
-    color: 'bg-[#1B2028] text-[#B7C6F9] border-[#273041]',
-  },
-  voluntario: {
-    label: 'Voluntario',
-    description: 'Ventas y punto de venta',
-    color: 'bg-[#1B2028] text-[#B7C6F9] border-[#273041]',
-  },
+const ROLE_CONFIG: Record<Role, { label: string; color: string; description: string }> = {
+  super_admin: { label: 'Super Admin',  description: 'Acceso global · Todos los campus', color: 'bg-[#1B2028] text-[#B7C6F9] border-[#273041]' },
+  admin:       { label: 'Admin Campus', description: 'Pastor · Gestión de sede',         color: 'bg-[#1B2028] text-[#B7C6F9] border-[#273041]' },
+  voluntario:  { label: 'Voluntario',   description: 'Ventas y punto de venta',           color: 'bg-[#1B2028] text-[#B7C6F9] border-[#273041]' },
 }
 
 export default function Sidebar({
-  role,
-  campusName,
-  mobileOpen,
-  onClose,
+  role, campusName, mobileOpen, onClose,
 }: {
-  role: Role
-  campusName?: string
-  mobileOpen?: boolean
-  onClose?: () => void
+  role: Role; campusName?: string; mobileOpen?: boolean; onClose?: () => void
 }) {
   const pathname = usePathname()
-  const visible = NAV_ITEMS.filter((i) => i.roles.includes(role))
-  const sections = Array.from(new Set(visible.map((i) => i.section ?? '')))
-  const config = ROLE_CONFIG[role] ?? ROLE_CONFIG.voluntario
+  const [enabledModules, setEnabledModules] = useState<Set<string> | null>(null)
+
+  // Cargar permisos desde Supabase (solo para admin y voluntario — super_admin ve todo)
+  useEffect(() => {
+    if (role === 'super_admin') {
+      setEnabledModules(new Set(['*'])) // wildcard = todo habilitado
+      return
+    }
+
+    const supabase = createClient()
+    supabase
+      .from('module_permissions')
+      .select('module, enabled')
+      .eq('role', role)
+      .then(({ data }) => {
+        const enabled = new Set<string>()
+        ;(data ?? []).forEach((row: any) => {
+          if (row.enabled) enabled.add(row.module)
+        })
+        setEnabledModules(enabled)
+      })
+  }, [role])
+
+  // Filtrar items por rol y por permisos dinámicos
+  const visible = NAV_ITEMS.filter(item => {
+    // Filtro de rol base
+    if (!item.roles.includes(role)) return false
+
+    // Super admin ve todo
+    if (role === 'super_admin') return true
+
+    // Módulos sin key de permiso (dashboard, perfil, etc.) siempre visibles
+    if (item.moduleKey === null) return true
+
+    // Si los permisos aún no cargan, mostrar mientras tanto (evitar parpadeo)
+    if (enabledModules === null) return true
+
+    return enabledModules.has(item.moduleKey)
+  })
+
+  const sections = Array.from(new Set(visible.map(i => i.section ?? '')))
+  const config   = ROLE_CONFIG[role] ?? ROLE_CONFIG.voluntario
 
   return (
     <aside className="flex h-full w-[280px] shrink-0 flex-col overflow-y-auto border-r border-[#222831] bg-[#0F1216] px-3 py-5 lg:w-56">
@@ -117,8 +128,18 @@ export default function Sidebar({
       </div>
 
       <nav className="flex flex-1 flex-col gap-1">
-        {sections.map((section) => {
-          const items = visible.filter((i) => (i.section ?? '') === section)
+        {/* Skeleton mientras cargan los permisos */}
+        {enabledModules === null && role !== 'super_admin' && (
+          <div className="space-y-1 px-2">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="h-9 animate-pulse rounded-xl bg-zinc-800/50" />
+            ))}
+          </div>
+        )}
+
+        {enabledModules !== null && sections.map(section => {
+          const items = visible.filter(i => (i.section ?? '') === section)
+          if (!items.length) return null
 
           return (
             <div key={section} className="mb-2">
@@ -128,7 +149,7 @@ export default function Sidebar({
                 </p>
               )}
 
-              {items.map((item) => {
+              {items.map(item => {
                 const active =
                   pathname === item.href ||
                   (item.href !== '/dashboard' && pathname.startsWith(item.href + '/'))
