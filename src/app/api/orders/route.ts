@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     const paymentMethod: string  = body.payment_method ?? null
     const discount                = Number(body.discount ?? 0)
     const promoCode: string|null  = body.promo_code ?? null
+    const deliveryStatus: string|null = body.delivery_status ?? null
     const extraNotes: string|null = body.notes ?? null
     const requestedCampusId: string|null = body.campus_id ?? null
     const clientName: string|null = String(body.client_name ?? '').trim() || null
@@ -170,6 +171,7 @@ export async function POST(req: NextRequest) {
         total: Math.round(totalCalculado),
         notes: combinedNotes,
         status: 'paid',
+        delivery_status: deliveryStatus,
       })
       .select('id, order_number, status, created_at, total, discount, payment_method, notes')
       .single()
@@ -228,6 +230,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: movementError.message }, { status: 400 })
       }
     }
+    } // end if !pending delivery
 
     // ── Email con Resend ──
     let emailSent = false

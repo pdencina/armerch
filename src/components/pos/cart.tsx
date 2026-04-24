@@ -15,6 +15,8 @@ import {
   Receipt,
   Minus,
   Plus,
+  Package,
+  Clock,
 } from 'lucide-react'
 import SaleSuccessModal from '@/components/pos/sale-success-modal'
 
@@ -159,6 +161,7 @@ export default function Cart() {
 
   // ── UI state ──
   const [showNotes, setShowNotes] = useState(false)
+  const [isPendingDelivery, setIsPendingDelivery] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
   const [createdOrder, setCreatedOrder] = useState<{
@@ -215,12 +218,14 @@ export default function Cart() {
           payment_method: paymentMethod,
           discount: 0,
           notes: notes.trim() || null,
+          delivery_status: isPendingDelivery ? 'pending' : null,
         }),
       })
 
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.error || 'Error al registrar la venta.')
 
+      setIsPendingDelivery(false)
       setCreatedOrder({
         id: data.order_id,
         number: data.order_number ?? data.order_id,
@@ -375,6 +380,41 @@ export default function Cart() {
                 </AnimatePresence>
               </div>
 
+              {/* PEDIDO PARA PRODUCIR */}
+              <button
+                onClick={() => setIsPendingDelivery(v => !v)}
+                className={`flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left transition-all ${
+                  isPendingDelivery
+                    ? 'border-violet-500/40 bg-violet-500/10'
+                    : 'border-white/6 bg-white/[0.02] hover:border-white/10'
+                }`}
+              >
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition ${
+                  isPendingDelivery ? 'bg-violet-500/20' : 'bg-white/5'
+                }`}>
+                  {isPendingDelivery
+                    ? <Clock size={16} className="text-violet-400" />
+                    : <Package size={16} className="text-zinc-500" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold ${isPendingDelivery ? 'text-violet-300' : 'text-zinc-300'}`}>
+                    {isPendingDelivery ? 'Pedido para producir' : 'Entrega inmediata'}
+                  </p>
+                  <p className="text-[10px] text-zinc-600">
+                    {isPendingDelivery
+                      ? 'Pagado · quedará pendiente de entrega'
+                      : 'El producto se entrega en el momento'}
+                  </p>
+                </div>
+                <div className={`relative flex h-5 w-9 shrink-0 items-center rounded-full transition-all ${
+                  isPendingDelivery ? 'bg-violet-500' : 'bg-zinc-700'
+                }`}>
+                  <span className={`absolute h-3.5 w-3.5 rounded-full bg-white shadow transition-all ${
+                    isPendingDelivery ? 'left-[18px]' : 'left-[3px]'
+                  }`} />
+                </div>
+              </button>
+
               {/* MÉTODO DE PAGO */}
               <div className="space-y-2">
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-zinc-500">
@@ -420,12 +460,17 @@ export default function Cart() {
                 onClick={handleConfirmSale}
                 disabled={!canSubmit}
                 className="relative w-full overflow-hidden rounded-3xl py-4 text-[17px] font-black text-black transition disabled:cursor-not-allowed disabled:opacity-40"
-                style={{ background: canSubmit ? '#d97706' : '#555' }}
+                style={{ background: canSubmit ? (isPendingDelivery ? '#7c3aed' : '#d97706') : '#555' }}
               >
                 {submitting ? (
                   <span className="flex items-center justify-center gap-2">
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" />
                     Procesando...
+                  </span>
+                ) : isPendingDelivery ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Clock size={18} />
+                    Registrar pedido · {fmt(total())}
                   </span>
                 ) : (
                   <span className="flex items-center justify-center gap-2">
