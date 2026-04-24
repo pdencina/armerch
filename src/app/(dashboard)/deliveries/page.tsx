@@ -268,7 +268,7 @@ export default function DeliveriesPage() {
     if (error) { toast.error(error.message); setLoading(false); setRefreshing(false); return }
 
     // Fetch campus names separately (orders has no FK to campus in schema)
-    const campusIds = [...new Set((data ?? []).map((o: any) => o.campus_id).filter(Boolean))]
+    const campusIds = Array.from(new Set((data ?? []).map((o: any) => o.campus_id).filter(Boolean)))
     const campusMap: Record<string, string> = {}
     if (campusIds.length > 0) {
       const { data: campusData } = await supabase
