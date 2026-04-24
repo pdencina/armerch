@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
-import { useCart, type Promotion, type CartItem } from '@/lib/hooks/use-cart'
+import { useCart, type CartItem } from '@/lib/hooks/use-cart'
 import {
   ShoppingCart,
   Trash2,
@@ -26,6 +26,80 @@ const fmt = (n: number) =>
     maximumFractionDigits: 0,
   }).format(n)
 
+// ─── CartItemRow ────────────────────────────────────────────────────────────
+function CartItemRow({
+  item,
+  onUpdateQty,
+  onRemove,
+}: {
+  item: CartItem
+  onUpdateQty: (qty: number) => void
+  onRemove: () => void
+}) {
+  const lineTotal = item.unit_price * item.quantity
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -8, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, x: 30, scale: 0.95 }}
+      transition={{ duration: 0.2 }}
+      className="rounded-2xl border border-white/6 bg-white/[0.025] p-3"
+    >
+      <div className="flex items-start gap-2">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.05] text-xl">
+          {item.product.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={item.product.image_url}
+              alt={item.product.name}
+              className="h-10 w-10 rounded-xl object-cover"
+            />
+          ) : (
+            '📦'
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold leading-tight text-white">
+            {item.product.name}
+          </p>
+          <p className="mt-0.5 text-xs text-zinc-500">{fmt(item.unit_price)} c/u</p>
+        </div>
+
+        <button
+          onClick={onRemove}
+          className="rounded-lg p-1 text-zinc-600 transition hover:bg-red-500/10 hover:text-red-400"
+          aria-label="Quitar"
+        >
+          <Trash2 size={13} />
+        </button>
+      </div>
+
+      <div className="mt-2.5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1 rounded-xl bg-black/30 px-1.5 py-1">
+          <button
+            onClick={() => onUpdateQty(item.quantity - 1)}
+            className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/5 text-white transition hover:bg-white/10"
+          >
+            <Minus size={11} />
+          </button>
+          <span className="w-7 text-center text-sm font-bold text-white">{item.quantity}</span>
+          <button
+            onClick={() => onUpdateQty(item.quantity + 1)}
+            disabled={item.quantity >= item.product.stock}
+            className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/5 text-white transition hover:bg-white/10 disabled:opacity-30"
+          >
+            <Plus size={11} />
+          </button>
+        </div>
+        <span className="text-sm font-bold text-white">{fmt(lineTotal)}</span>
+      </div>
+    </motion.div>
+  )
+}
+
 // ─── componente principal ───────────────────────────────────────────────────
 
 export default function Cart() {
@@ -34,7 +108,6 @@ export default function Cart() {
     items,
     paymentMethod,
     setPaymentMethod,
-    setGlobalDiscount,
     clientName,
     clientEmail,
     notes,
@@ -43,10 +116,8 @@ export default function Cart() {
     setNotes,
     updateQuantity,
     removeItem,
-    setItemDiscount,
     clearCart,
     subtotal,
-    promoDiscount,
     total,
     itemCount,
   } = useCart()
@@ -210,7 +281,6 @@ export default function Cart() {
                       item={item}
                       onUpdateQty={(qty) => updateQuantity(item.product.id, qty)}
                       onRemove={() => removeItem(item.product.id)}
-                      onDiscountChange={(pct) => setItemDiscount(item.product.id, pct)}
                     />
                   ))}
                 </div>
