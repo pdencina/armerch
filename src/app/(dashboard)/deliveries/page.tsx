@@ -21,7 +21,7 @@ type DeliveryOrder = {
   payment_method: string
   notes: string | null
   campus_id: string
-  campus: { name: string } | null
+  campus: { name: string }[] | { name: string } | null
   order_contacts: { client_name: string; client_email: string | null }[]
   order_items: {
     quantity: number
@@ -85,8 +85,9 @@ function OrderCard({
   const [noteInput, setNoteInput] = useState('')
   const [showNoteInput, setShowNoteInput] = useState(false)
 
-  const cfg = STATUS_CFG[order.delivery_status]
+  const cfg = STATUS_CFG[order.delivery_status as DeliveryStatus] ?? STATUS_CFG['pending']
   const Icon = cfg.icon
+  const campusObj = Array.isArray(order.campus) ? order.campus[0] : order.campus
   const client = order.order_contacts?.[0]
   const isUpdating = updating === order.id
 
@@ -122,9 +123,9 @@ function OrderCard({
               <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot} ${order.delivery_status === 'pending' ? 'animate-pulse' : ''}`} />
               {cfg.label}
             </span>
-            {order.campus && (
+            {campusObj && (
               <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
-                {order.campus.name}
+                {campusObj.name}
               </span>
             )}
           </div>
@@ -266,7 +267,7 @@ export default function DeliveriesPage() {
       .order('created_at', { ascending: false })
 
     if (error) { toast.error(error.message); setLoading(false); setRefreshing(false); return }
-    setOrders((data ?? []) as DeliveryOrder[])
+    setOrders((data ?? []) as unknown as DeliveryOrder[])
     setLoading(false)
     setRefreshing(false)
   }
@@ -318,7 +319,7 @@ export default function DeliveriesPage() {
 
   // Derived data
   const campuses = useMemo(() =>
-    Array.from(new Map(orders.map(o => [o.campus_id, o.campus?.name ?? o.campus_id])).entries()),
+    Array.from(new Map(orders.map(o => { const c = Array.isArray(o.campus) ? o.campus[0] : o.campus; return [o.campus_id, c?.name ?? o.campus_id] })).entries()),
     [orders]
   )
 
