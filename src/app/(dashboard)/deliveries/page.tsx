@@ -105,6 +105,8 @@ function OrderCard({
   const [expanded, setExpanded] = useState(false)
   const [noteInput, setNoteInput] = useState('')
   const [confirmDelivery, setConfirmDelivery] = useState(false)
+  const [clientPhone, setClientPhone] = useState('')
+  const [whatsappSent, setWhatsappSent] = useState(false)
 
   const cfg    = STATUS_CFG[order.delivery_status as DeliveryStatus] ?? STATUS_CFG.pending
   const action = getAction(order.delivery_status, role)
@@ -113,7 +115,7 @@ function OrderCard({
   const campusObj = Array.isArray(order.campus) ? (order.campus as any)[0] : order.campus
   const isUpdating = updating === order.id
 
-  function handleAction() {
+  async function handleAction() {
     if (!action) return
     if (action.next === 'delivered') {
       if (!confirmDelivery) { setConfirmDelivery(true); setExpanded(true); return }
@@ -122,6 +124,32 @@ function OrderCard({
       setNoteInput('')
     } else {
       onStatusChange(order.id, action.next)
+      // Enviar WhatsApp si hay número ingresado
+      if (clientPhone.trim() && action.next === 'ready') {
+        try {
+          const supabase = (await import('@/lib/supabase/client')).createClient()
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session?.access_token) {
+            const campusObj = Array.isArray(order.campus) ? (order.campus as any)[0] : order.campus
+            const res = await fetch('/api/whatsapp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+              body: JSON.stringify({
+                phone:       clientPhone.trim(),
+                client_name: client?.client_name ?? 'Cliente',
+                campus_name: campusObj?.name ?? 'tu campus ARM',
+                order_id:    order.id,
+                items: order.order_items.map(i => ({
+                  name:     i.product?.name ?? 'Producto',
+                  size:     i.size,
+                  quantity: i.quantity,
+                })),
+              }),
+            })
+            if (res.ok) setWhatsappSent(true)
+          }
+        } catch (e) { console.error('WhatsApp send error:', e) }
+      }
     }
   }
 
@@ -226,6 +254,32 @@ function OrderCard({
           {/* Action */}
           {action && (
             <div className="space-y-2 pt-1">
+              {/* WhatsApp phone input — solo al marcar como listo */}
+              {action.next === 'ready' && (
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                    📱 WhatsApp del cliente (opcional)
+                  </label>
+                  <input
+                    value={clientPhone}
+                    onChange={e => setClientPhone(e.target.value)}
+                    placeholder="+56912345678"
+                    type="tel"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white outline-none transition focus:border-green-500/40 placeholder-zinc-600"
+                  />
+                  {clientPhone && !whatsappSent && (
+                    <p className="mt-1 text-[10px] text-green-400">
+                      ✓ Se enviará WhatsApp automáticamente al marcar como listo
+                    </p>
+                  )}
+                  {whatsappSent && (
+                    <p className="mt-1 text-[10px] text-green-400">
+                      💬 WhatsApp enviado correctamente
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Delivery confirmation */}
               {confirmDelivery && (
                 <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-2">
