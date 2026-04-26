@@ -75,7 +75,7 @@ function getAction(status: DeliveryStatus, role: string) {
       icon: Truck,
     }
   }
-  if (status === 'ready' && (role === 'admin' || role === 'voluntario' || role === 'super_admin')) {
+  if (status === 'ready' && (role === 'admin' || role === 'voluntario')) {
     return {
       next: 'delivered' as DeliveryStatus,
       label: 'Marcar como entregado al cliente',
