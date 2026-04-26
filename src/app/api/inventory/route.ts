@@ -52,6 +52,27 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Stock inválido' }, { status: 400 })
     }
 
+    // ── Verificar que el inventory_id pertenece al campus del Admin ──
+    // Evita que un Admin modifique stock de otro campus
+    if (profile.role !== 'super_admin') {
+      const { data: invRow } = await adminClient
+        .from('inventory')
+        .select('campus_id')
+        .eq('id', inventoryId)
+        .single()
+
+      if (!invRow) {
+        return NextResponse.json({ error: 'Inventario no encontrado' }, { status: 404 })
+      }
+
+      if (invRow.campus_id !== profile.campus_id) {
+        return NextResponse.json(
+          { error: 'No autorizado: este inventario no pertenece a tu campus' },
+          { status: 403 }
+        )
+      }
+    }
+
     const { error: updateError } = await adminClient
       .from('inventory')
       .update({
