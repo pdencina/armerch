@@ -16,6 +16,20 @@ export default function ForgotPasswordPage() {
     setError('')
 
     const supabase = createClient()
+
+    // Verificar que el email existe en el sistema antes de enviar
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email.trim().toLowerCase())
+      .maybeSingle()
+
+    if (!profile) {
+      setLoading(false)
+      setError('No existe una cuenta con ese email en el sistema.')
+      return
+    }
+
     const { error: err } = await supabase.auth.resetPasswordForEmail(
       email.trim(),
       { redirectTo: `${window.location.origin}/reset-password` }

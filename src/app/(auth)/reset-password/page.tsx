@@ -13,16 +13,41 @@ export default function ResetPasswordPage() {
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState('')
   const [success, setSuccess]     = useState(false)
-  const [validSession, setValidSession] = useState(false)
   const [checking, setChecking]   = useState(true)
+  const [validSession, setValidSession] = useState(false)
 
   useEffect(() => {
-    // Supabase sets the session from the URL hash automatically
     const supabase = createClient()
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setValidSession(!!session)
+
+    // Supabase envía el token en el hash de la URL: #access_token=...&type=recovery
+    // El cliente de Supabase lo procesa automáticamente con onAuthStateChange
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          // Token de recuperación válido
+          setValidSession(true)
+          setChecking(false)
+        } else if (event === 'SIGNED_IN' && session) {
+          // También válido si ya hay sesión
+          setValidSession(true)
+          setChecking(false)
+        }
+      }
+    )
+
+    // Timeout — si en 3 segundos no hay evento, verificar sesión directamente
+    const timeout = setTimeout(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        setValidSession(true)
+      }
       setChecking(false)
-    })
+    }, 3000)
+
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(timeout)
+    }
   }, [])
 
   async function handleReset() {
@@ -47,8 +72,16 @@ export default function ResetPasswordPage() {
     return (
       <div className="lr">
         <div className="lc">
-          <div className="lb" style={{ textAlign: 'center' }}>
-            <div style={{ width: 28, height: 28, border: '2px solid #f59e0b', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto' }} />
+          <div className="lb" style={{ textAlign: 'center', padding: '40px' }}>
+            <div style={{
+              width: 32, height: 32,
+              border: '2px solid #f59e0b',
+              borderTopColor: 'transparent',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+              margin: '0 auto 16px'
+            }} />
+            <p style={{ color: '#71717a', fontSize: '14px' }}>Verificando link...</p>
           </div>
         </div>
       </div>
@@ -58,22 +91,33 @@ export default function ResetPasswordPage() {
   if (!validSession) {
     return (
       <div className="lr">
+        <div className="lr-grid" />
+        <div className="lr-g1" />
+        <div className="lr-g2" />
         <div className="lc">
           <div className="lb">
-            <div style={{ textAlign: 'center', padding: '20px' }}>
-              <div style={{ fontSize: '40px', marginBottom: '16px' }}>⚠️</div>
-              <p style={{ color: '#f87171', fontWeight: 600, marginBottom: '8px' }}>
+            <div style={{ textAlign: 'center', padding: '24px' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+              <p style={{ color: '#f87171', fontWeight: 600, fontSize: '16px', marginBottom: '8px' }}>
                 Link inválido o expirado
               </p>
-              <p style={{ color: '#71717a', fontSize: '13px', marginBottom: '24px' }}>
-                Este link de recuperación ya fue usado o expiró. Solicita uno nuevo.
+              <p style={{ color: '#71717a', fontSize: '13px', marginBottom: '24px', lineHeight: 1.6 }}>
+                Este link de recuperación ya fue usado o expiró.<br/>
+                Los links son válidos por 1 hora.
               </p>
               <a href="/forgot-password" style={{
+                display: 'inline-block',
                 background: '#f59e0b', color: '#000', fontWeight: 700,
-                padding: '12px 24px', borderRadius: '12px', textDecoration: 'none', fontSize: '14px'
+                padding: '12px 28px', borderRadius: '12px',
+                textDecoration: 'none', fontSize: '14px'
               }}>
                 Solicitar nuevo link
               </a>
+              <div style={{ marginTop: '16px' }}>
+                <a href="/login" style={{ fontSize: '13px', color: '#71717a', textDecoration: 'none' }}>
+                  ← Volver al login
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -104,11 +148,12 @@ export default function ResetPasswordPage() {
           {success ? (
             <div className="lf">
               <div style={{
-                background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)',
-                borderRadius: '16px', padding: '24px', textAlign: 'center',
+                background: 'rgba(34,197,94,0.08)',
+                border: '1px solid rgba(34,197,94,0.2)',
+                borderRadius: '16px', padding: '28px', textAlign: 'center',
               }}>
                 <div style={{ fontSize: '48px', marginBottom: '12px' }}>🎉</div>
-                <p style={{ color: '#86efac', fontWeight: 700, marginBottom: '8px' }}>
+                <p style={{ color: '#86efac', fontWeight: 700, fontSize: '16px', marginBottom: '8px' }}>
                   ¡Contraseña actualizada!
                 </p>
                 <p style={{ color: '#71717a', fontSize: '13px' }}>
@@ -132,7 +177,12 @@ export default function ResetPasswordPage() {
                   <button
                     type="button"
                     onClick={() => setShowPw(v => !v)}
-                    style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#71717a', display: 'flex' }}
+                    style={{
+                      position: 'absolute', right: '14px', top: '50%',
+                      transform: 'translateY(-50%)', background: 'none',
+                      border: 'none', cursor: 'pointer', color: '#71717a',
+                      display: 'flex', alignItems: 'center'
+                    }}
                   >
                     {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -147,7 +197,10 @@ export default function ResetPasswordPage() {
                   onChange={e => setConfirm(e.target.value)}
                   placeholder="Repite la contraseña"
                   className="lfx"
-                  style={{ borderColor: confirm && password !== confirm ? 'rgba(248,113,113,0.4)' : undefined }}
+                  style={{
+                    borderColor: confirm && password !== confirm
+                      ? 'rgba(248,113,113,0.5)' : undefined
+                  }}
                   onKeyDown={e => { if (e.key === 'Enter') handleReset() }}
                 />
                 {confirm && password !== confirm && (
