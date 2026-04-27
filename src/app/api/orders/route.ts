@@ -191,7 +191,7 @@ export async function POST(req: NextRequest) {
     if (clientName || clientEmail) {
       const { error: contactError } = await adminClient
         .from('order_contacts')
-        .insert({ order_id: createdOrder.id, client_name: clientName, client_email: clientEmail })
+        .insert({ order_id: createdOrder.id, client_name: clientName, client_email: clientEmail, client_phone: clientPhone || null })
       if (contactError) {
         return NextResponse.json({ error: contactError.message }, { status: 400 })
       }
