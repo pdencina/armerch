@@ -571,7 +571,7 @@ export default function CloseDayPage() {
         setDailyOrdersCount(Number(data.daily_summary?.orders_count ?? 0))
         setPaymentSummary(data.daily_summary?.payment_summary ?? [])
       } else {
-        toast.error(data.error ?? 'Error cargando caja')
+        console.error('Error cargando caja:', data.error)
       }
     }
 
