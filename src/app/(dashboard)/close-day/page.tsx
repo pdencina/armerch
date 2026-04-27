@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { toast } from 'sonner'
+import { NotifyModal, useNotify } from '@/components/ui/notify-modal'
 import {
   Banknote, Lock, LockOpen, TrendingUp, ShoppingBag,
   RefreshCw, CheckCircle2, AlertCircle, Clock,
@@ -224,6 +224,7 @@ function AdminView({
   const [openingAmount, setOpeningAmount] = useState(0)
   const [closingAmount, setClosingAmount] = useState(0)
   const [notes, setNotes] = useState('')
+  const { notify, success, error, close } = useNotify()
   const [saving, setSaving] = useState(false)
   const supabase = createClient()
 
@@ -245,7 +246,7 @@ function AdminView({
   async function openCash() {
     setSaving(true)
     const token = await getToken()
-    if (!token) { toast.error('Sin sesión'); setSaving(false); return }
+    if (!token) { error('Sin sesión'); setSaving(false); return }
 
     const res = await fetch('/api/cash-session', {
       method: 'POST',
@@ -253,8 +254,8 @@ function AdminView({
       body: JSON.stringify({ action: 'open', opening_amount: Number(openingAmount), notes: notes || null }),
     })
     const data = await res.json()
-    if (!res.ok) { toast.error(data.error ?? 'Error'); setSaving(false); return }
-    toast.success('Caja abierta')
+    if (!res.ok) { error('Error', data.error); setSaving(false); return }
+    success('Caja abierta', undefined, '💰')
     setNotes(''); setOpeningAmount(0)
     onRefresh(); setSaving(false)
   }
@@ -262,7 +263,7 @@ function AdminView({
   async function closeCash() {
     setSaving(true)
     const token = await getToken()
-    if (!token) { toast.error('Sin sesión'); setSaving(false); return }
+    if (!token) { error('Sin sesión'); setSaving(false); return }
 
     const res = await fetch('/api/cash-session', {
       method: 'POST',
@@ -270,16 +271,17 @@ function AdminView({
       body: JSON.stringify({ action: 'close', closing_amount_declared: Number(closingAmount), notes: notes || null }),
     })
     const data = await res.json()
-    if (!res.ok) { toast.error(data.error ?? 'Error'); setSaving(false); return }
-    toast.success('Caja cerrada correctamente')
+    if (!res.ok) { error('Error', data.error); setSaving(false); return }
+    success('Caja cerrada', 'El arqueo fue registrado correctamente', '🔒')
     setNotes(''); setClosingAmount(0)
     onRefresh(); setSaving(false)
   }
 
   return (
     <div className="space-y-5">
+      <NotifyModal notify={notify} onClose={close} />
 
-      {/* Stats bar */}
+      {/* Stats bar */
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: 'Ventas hoy',   value: fmt(dailySalesTotal),        color: 'text-amber-400',   icon: TrendingUp  },
