@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Tag } from 'lucide-react'
 
 type ProductRow = {
   id: string
@@ -179,6 +179,13 @@ export default function ProductsPage() {
         >
           <Plus size={18} />
           Nuevo producto
+        </Link>
+        <Link
+          href="/products/labels"
+          className="inline-flex items-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-semibold text-zinc-300 transition hover:border-zinc-500 hover:text-white"
+        >
+          <Tag size={16} />
+          Etiquetas
         </Link>
       </div>
 
