@@ -18,7 +18,9 @@ function formatPhone(phone: string): string {
 function buildMessage(
   clientName: string,
   items: { name: string; size?: string | null; quantity: number }[],
-  campusName: string
+  campusName: string,
+  paymentUrl?: string | null,
+  totalAmount?: number | null,
 ): string {
   const firstName = clientName.split(' ')[0]
 
@@ -29,6 +31,26 @@ function buildMessage(
     })
     .join('\n')
 
+  const fmtCLP = (n: number) =>
+    new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n)
+
+  // Payment link message
+  if (paymentUrl) {
+    return `¡Hola ${firstName}! 👋
+
+Tu pedido de ARM Merch está listo para pagar:
+
+${productLines}
+
+💳 Total: ${totalAmount ? fmtCLP(totalAmount) : ''}
+
+Paga con tarjeta, Apple Pay o Google Pay aquí:
+${paymentUrl}
+
+¡Te esperamos! — Equipo ARM Merch`
+  }
+
+  // Ready for pickup message
   return `¡Hola ${firstName}! 🎉
 
 Tu pedido de ARM Merch está listo para retirar:
@@ -80,7 +102,8 @@ export async function POST(req: NextRequest) {
     }
 
     const toNumber  = `whatsapp:${formatPhone(phone)}`
-    const message   = buildMessage(client_name, items, campus_name)
+    const { phone, client_name, items, campus_name, order_id, payment_url, total_amount } = body
+    const message   = buildMessage(client_name, items, campus_name, payment_url, total_amount)
 
     // Send via Twilio REST API (no need to install twilio package)
     const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`

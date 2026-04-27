@@ -17,6 +17,7 @@ import {
   Plus,
   Package,
   Clock,
+  Link,
 } from 'lucide-react'
 import SaleSuccessModal from '@/components/pos/sale-success-modal'
 
@@ -168,6 +169,7 @@ export default function Cart() {
 
   // ── UI state ──
   const [clientPhone, setClientPhone] = useState('')
+  const [paymentLinkUrl, setPaymentLinkUrl] = useState<string | null>(null)
   const [showNotes, setShowNotes] = useState(false)
   const [isPendingDelivery, setIsPendingDelivery] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -207,6 +209,46 @@ export default function Cart() {
         .eq('id', session.user.id)
         .single()
 
+      // ── Si es link de pago, crear checkout en SumUp primero ──
+      if (paymentMethod === 'link' && clientPhone.trim()) {
+        const { data: { session: authSession } } = await supabase.auth.getSession()
+        if (authSession?.access_token) {
+          const checkoutRes = await fetch('/api/sumup/checkout', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${authSession.access_token}`,
+            },
+            body: JSON.stringify({
+              amount: total(),
+              currency: 'CLP',
+              description: `Pedido ARM Merch - ${clientName.trim()}`,
+              order_id: `arm-${Date.now()}`,
+            }),
+          })
+          const checkoutData = await checkoutRes.json()
+          if (checkoutRes.ok && checkoutData.payment_url) {
+            // Send WhatsApp with payment link
+            await fetch('/api/whatsapp', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${authSession.access_token}`,
+              },
+              body: JSON.stringify({
+                phone: clientPhone.trim(),
+                client_name: clientName.trim(),
+                campus_name: 'ARM Merch',
+                items: items.map(i => ({ name: i.product.name, size: i.size, quantity: i.quantity })),
+                payment_url: checkoutData.payment_url,
+                total_amount: total(),
+              }),
+            })
+            setPaymentLinkUrl(checkoutData.payment_url)
+          }
+        }
+      }
+
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: {
@@ -237,6 +279,7 @@ export default function Cart() {
 
       setIsPendingDelivery(false)
       setClientPhone('')
+      setPaymentLinkUrl(null)
       setCreatedOrder({
         id: data.order_id,
         number: data.order_number ?? data.order_id,
