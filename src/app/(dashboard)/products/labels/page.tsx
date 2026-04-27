@@ -100,13 +100,14 @@ function drawCode128(canvas: HTMLCanvasElement, text: string, width: number, hei
 
 // ─── Single Label Component ───────────────────────────────────────────────────
 function Label({
-  item, size, showPrice, showSku, brandName,
+  item, size, showPrice, showSku, brandName, containerWidth,
 }: {
   item: LabelItem
   size: SizeKey
   showPrice: boolean
   showSku: boolean
   brandName: string
+  containerWidth?: number
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const cfg       = LABEL_SIZES[size]
@@ -124,7 +125,7 @@ function Label({
   return (
     <div
       className="label-item border border-zinc-300 bg-white flex flex-col items-center justify-between overflow-hidden"
-      style={{ width: cfg.w, height: cfg.h, padding: '4px 8px', boxSizing: 'border-box' }}
+      style={{ width: containerWidth ?? cfg.w, height: cfg.h, padding: '4px 8px', boxSizing: 'border-box' }}
     >
       {/* Brand */}
       <div className="w-full flex justify-between items-center" style={{ fontSize: cfg.fontSize - 1 }}>
@@ -455,9 +456,12 @@ export default function LabelsPage() {
                 ref={printRef}
                 className="print-grid flex flex-wrap gap-1 bg-white rounded-lg p-2 overflow-auto max-h-[320px]"
               >
-                {expandedLabels.map((item, i) => (
-                  <Label key={i} item={item} size={size} showPrice={showPrice} showSku={showSku} brandName={brandName} />
-                ))}
+                {expandedLabels.map((item, i) => {
+                  const previewW = Math.floor((352 - (cols + 1) * 4) / cols)
+                  return (
+                    <Label key={i} item={item} size={size} showPrice={showPrice} showSku={showSku} brandName={brandName} containerWidth={previewW} />
+                  )
+                })}
               </div>
               <p className="mt-2 text-center text-[10px] text-zinc-600">
                 {expandedLabels.length} etiquetas · {cols} columnas por fila
