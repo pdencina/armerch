@@ -174,6 +174,7 @@ export async function POST(req: NextRequest) {
         notes: combinedNotes,
         status: 'paid',
         delivery_status: deliveryStatus,
+        client_phone: clientPhone || null,
       })
       .select('id, order_number, status, created_at, total, discount, payment_method, notes')
       .single()

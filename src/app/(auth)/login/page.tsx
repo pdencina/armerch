@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import './login.css'
 
@@ -99,6 +100,14 @@ export default function LoginPage() {
           </div>
 
           <div className="ldv" />
+
+          <div style={{ textAlign: 'right', marginTop: '-8px', marginBottom: '4px' }}>
+            <Link href="/forgot-password" style={{ fontSize: '12px', color: '#a1a1aa', textDecoration: 'none' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#f59e0b')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#a1a1aa')}>
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
 
           {error && <div className="ler">{error}</div>}
 

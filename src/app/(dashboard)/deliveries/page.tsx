@@ -21,7 +21,7 @@ type DeliveryOrder = {
   notes: string | null
   campus_id: string
   campus: { name: string } | null
-  order_contacts: { client_name: string; client_email: string | null }[]
+  order_contacts: { client_name: string; client_email: string | null; client_phone?: string | null }[]
   order_items: {
     quantity: number
     unit_price: number
@@ -104,7 +104,7 @@ function OrderCard({
 }) {
   const [expanded, setExpanded] = useState(false)
   const [noteInput, setNoteInput] = useState('')
-  const [clientPhone, setClientPhone] = useState('')
+  const [clientPhone, setClientPhone] = useState(order.order_contacts?.[0]?.client_phone ?? '')
   const [whatsappSent, setWhatsappSent] = useState(false)
 
   const cfg    = STATUS_CFG[order.delivery_status as DeliveryStatus] ?? STATUS_CFG.pending
@@ -346,7 +346,7 @@ export default function DeliveriesPage() {
       .select(`
         id, order_number, total, delivery_status, created_at,
         payment_method, notes, campus_id,
-        order_contacts(client_name, client_email),
+        order_contacts(client_name, client_email, client_phone),
         order_items(quantity, unit_price, product_id, size, product:products(name, sku))
       `)
       .not('delivery_status', 'is', null)

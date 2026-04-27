@@ -223,6 +223,7 @@ export default function Cart() {
           })),
           client_name: clientName.trim(),
           client_email: clientEmail.trim() || null,
+          client_phone: clientPhone.trim() || null,
           payment_method: paymentMethod,
           discount: 0,
           notes: notes.trim() || null,
@@ -234,6 +235,7 @@ export default function Cart() {
       if (!res.ok) throw new Error(data?.error || 'Error al registrar la venta.')
 
       setIsPendingDelivery(false)
+      setClientPhone('')
       setCreatedOrder({
         id: data.order_id,
         number: data.order_number ?? data.order_id,
@@ -354,6 +356,13 @@ export default function Cart() {
                   placeholder="Email (voucher por correo)"
                   value={clientEmail}
                   onChange={(e) => setClientEmail(e.target.value)}
+                  className="w-full rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-amber-500/40"
+                />
+                <input
+                  placeholder="Teléfono WhatsApp (ej: +56912345678)"
+                  value={clientPhone}
+                  onChange={(e) => setClientPhone(e.target.value)}
+                  type="tel"
                   className="w-full rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-amber-500/40"
                 />
               </div>
