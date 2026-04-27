@@ -95,14 +95,13 @@ export async function POST(req: NextRequest) {
 
     // Parse body
     const body = await req.json()
-    const { phone, client_name, items, campus_name, order_id } = body
+    const { phone, client_name, items, campus_name, order_id, payment_url, total_amount } = body
 
     if (!phone || !client_name || !items?.length || !campus_name) {
       return NextResponse.json({ error: 'Faltan datos: phone, client_name, items, campus_name' }, { status: 400 })
     }
 
     const toNumber  = `whatsapp:${formatPhone(phone)}`
-    const { phone, client_name, items, campus_name, order_id, payment_url, total_amount } = body
     const message   = buildMessage(client_name, items, campus_name, payment_url, total_amount)
 
     // Send via Twilio REST API (no need to install twilio package)
