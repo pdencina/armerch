@@ -167,6 +167,7 @@ export default function Cart() {
   } = useCart()
 
   // ── UI state ──
+  const [clientPhone, setClientPhone] = useState('')
   const [showNotes, setShowNotes] = useState(false)
   const [isPendingDelivery, setIsPendingDelivery] = useState(false)
   const [submitting, setSubmitting] = useState(false)
