@@ -30,14 +30,13 @@ export async function POST(req: NextRequest) {
     const appUrl      = process.env.NEXT_PUBLIC_APP_URL ?? 'https://armerch.com'
     const checkoutRef = order_id ?? `arm-${Date.now()}`
 
-    console.log('[SumUp] return_url:', `${appUrl}/api/sumup/webhook`)
-    console.log('[SumUp] redirect_url:', `${appUrl}/payment/success`)
+    console.log('[SumUp] Creating checkout:', { amount, currency, merchantCode, appUrl })
 
     const checkoutRes = await fetch('https://api.sumup.com/v0.1/checkouts', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
+        'Content-Type':  'application/json',
       },
       body: JSON.stringify({
         checkout_reference: checkoutRef,
@@ -46,7 +45,9 @@ export async function POST(req: NextRequest) {
         merchant_code:      merchantCode,
         description,
         hosted_checkout:    { enabled: true },
+        // SumUp llama este endpoint cuando el pago cambia de estado
         return_url:         `${appUrl}/api/sumup/webhook`,
+        // El cliente es redirigido aquí tras pagar
         redirect_url:       `${appUrl}/payment/success`,
       }),
     })
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest) {
     console.log('[SumUp] Checkout response:', JSON.stringify(checkoutData))
 
     if (!checkoutRes.ok) {
+      console.error('[SumUp] Checkout error:', JSON.stringify(checkoutData))
       return NextResponse.json(
         {
           error:       checkoutData?.message ?? 'Error creando checkout en SumUp',
@@ -65,7 +67,6 @@ export async function POST(req: NextRequest) {
     }
 
     const paymentUrl = checkoutData.hosted_checkout_url
-
     if (!paymentUrl) {
       return NextResponse.json(
         { error: 'SumUp no retornó URL de pago. Verifica que tu cuenta tenga Hosted Checkout habilitado.' },
