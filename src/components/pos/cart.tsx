@@ -184,10 +184,11 @@ export default function Cart() {
   )
 
   const paymentOptions = [
-    { key: 'efectivo', label: 'Efectivo', icon: Banknote },
-    { key: 'transferencia', label: 'Transfer.', icon: Landmark },
-    { key: 'debito', label: 'Débito', icon: CreditCard },
-    { key: 'credito', label: 'Crédito', icon: Wallet },
+    { key: 'efectivo',      label: 'Efectivo',   icon: Banknote  },
+    { key: 'transferencia', label: 'Transfer.',   icon: Landmark  },
+    { key: 'debito',        label: 'Débito',      icon: CreditCard },
+    { key: 'credito',       label: 'Crédito',     icon: Wallet    },
+    { key: 'link',          label: 'Link pago',   icon: Link      },
   ]
 
   // ── confirmar venta ──
