@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 // ─── POST /api/sumup/webhook ──────────────────────────────────────────────────
-// SumUp llama automáticamente a este endpoint cuando el estado del checkout cambia.
-// Se configura via return_url en la creación del checkout.
-// Maneja: PAID, FAILED, CANCELLED
+// SumUp envía: { event_type: "CHECKOUT_STATUS_CHANGED", id: "checkout-id" }
+// Hay que consultar la API de SumUp para obtener el estado real del checkout.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -12,11 +11,34 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     console.log('[SumUp Webhook] Received:', JSON.stringify(body))
 
-    const { checkout_reference, status, id: checkout_id, transaction_code } = body
+    const { event_type, id: checkout_id } = body
 
-    if (!checkout_reference) {
-      return NextResponse.json({ received: true, action: 'no_reference' })
+    // Solo procesar cambios de estado de checkout
+    if (event_type !== 'CHECKOUT_STATUS_CHANGED' || !checkout_id) {
+      return NextResponse.json({ received: true, action: 'ignored' })
     }
+
+    // ── Consultar el estado real del checkout a SumUp ─────────────────────────
+    const apiKey = process.env.SUMUP_API_KEY
+    if (!apiKey) {
+      console.error('[SumUp Webhook] SUMUP_API_KEY not configured')
+      return NextResponse.json({ error: 'API key missing' }, { status: 500 })
+    }
+
+    const checkoutRes = await fetch(`https://api.sumup.com/v0.1/checkouts/${checkout_id}`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    })
+
+    if (!checkoutRes.ok) {
+      console.error('[SumUp Webhook] Failed to fetch checkout:', checkout_id)
+      return NextResponse.json({ error: 'Failed to fetch checkout' }, { status: 500 })
+    }
+
+    const checkout = await checkoutRes.json()
+    const { status, checkout_reference, transactions } = checkout
+    const transaction_code = transactions?.[0]?.transaction_code ?? ''
+
+    console.log('[SumUp Webhook] Checkout status:', checkout_id, status, checkout_reference)
 
     const adminClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,35 +46,19 @@ export async function POST(req: NextRequest) {
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    // Buscar la orden por checkout_reference (enviamos arm-{timestamp} al crear)
-    // También intentamos por sumup_checkout_id como fallback
-    let order: any = null
-
-    // Intento 1: por checkout_reference en notes
-    const { data: o1 } = await adminClient
+    // Buscar la orden por checkout_reference en notes
+    const { data: order } = await adminClient
       .from('orders')
       .select('id, order_number, campus_id, status, order_items(product_id, quantity, size)')
       .ilike('notes', `%${checkout_reference}%`)
       .maybeSingle()
 
-    if (o1) order = o1
-
-    // Intento 2: por sumup_checkout_id si existe la columna
-    if (!order && checkout_id) {
-      const { data: o2 } = await adminClient
-        .from('orders')
-        .select('id, order_number, campus_id, status, order_items(product_id, quantity, size)')
-        .eq('sumup_checkout_id', checkout_id)
-        .maybeSingle()
-      if (o2) order = o2
-    }
-
     if (!order) {
       console.error('[SumUp Webhook] Order not found for reference:', checkout_reference)
-      return NextResponse.json({ received: true, action: 'order_not_found', checkout_reference })
+      return NextResponse.json({ received: true, action: 'order_not_found' })
     }
 
-    // Ya procesada — evitar duplicados
+    // Evitar duplicados
     if (order.status === 'paid' || order.status === 'cancelled') {
       console.log('[SumUp Webhook] Already processed:', order.order_number, order.status)
       return NextResponse.json({ received: true, action: 'already_processed' })
@@ -64,11 +70,11 @@ export async function POST(req: NextRequest) {
         .from('orders')
         .update({
           status: 'paid',
-          notes: `Pagado via SumUp | Ref: ${checkout_reference} | TXN: ${transaction_code ?? ''}`,
+          notes: `Pagado via SumUp | Ref: ${checkout_reference} | TXN: ${transaction_code}`,
         })
         .eq('id', order.id)
 
-      // Descontar stock por campus
+      // Descontar stock
       for (const item of (order.order_items ?? [])) {
         await adminClient
           .from('inventory_movements')
@@ -96,10 +102,9 @@ export async function POST(req: NextRequest) {
         .eq('id', order.id)
 
       console.log('[SumUp Webhook] ❌ Order', status, ':', order.order_number)
-      return NextResponse.json({ received: true, action: status.toLowerCase(), order_number: order.order_number })
+      return NextResponse.json({ received: true, action: status.toLowerCase() })
     }
 
-    // Otros estados (PENDING, etc) — solo loguear
     console.log('[SumUp Webhook] Status ignored:', status)
     return NextResponse.json({ received: true, action: 'ignored', status })
 

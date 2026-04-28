@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// ─── POST /api/sumup/checkout ──────────────────────────────────────────────────
-// Crea un Hosted Checkout en SumUp y retorna la URL de pago.
-// El frontend envía esa URL por WhatsApp al cliente.
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization')
@@ -33,8 +28,9 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ── Crear Hosted Checkout en SumUp ────────────────────────────────────────
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://armerch-poud.vercel.app'
     const checkoutRef = order_id ?? `arm-${Date.now()}`
+
     const checkoutRes = await fetch('https://api.sumup.com/v0.1/checkouts', {
       method: 'POST',
       headers: {
@@ -44,36 +40,31 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         checkout_reference: checkoutRef,
         amount: Number(amount),
-        currency: currency ?? 'CLP',
+        currency,
         merchant_code: merchantCode,
         description,
-        hosted_checkout: {
-          enabled: true,
-        },
-        // return_url = webhook que SumUp llama cuando el pago se completa
-        return_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://armerch-poud.vercel.app'}/api/sumup/webhook`,
-        // redirect_url = donde va el cliente tras pagar (página de éxito)
-        redirect_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://armerch-poud.vercel.app'}/pos?payment=success`,
+        hosted_checkout: { enabled: true },
+        // return_url = SumUp llama este endpoint (POST) cuando el checkout cambia de estado
+        return_url: `${appUrl}/api/sumup/webhook`,
+        // redirect_url = donde va el cliente en su browser tras pagar
+        redirect_url: `${appUrl}/pos?payment=success`,
       }),
     })
 
     const checkoutData = await checkoutRes.json()
+    console.log('[SumUp] Checkout response:', JSON.stringify(checkoutData))
 
     if (!checkoutRes.ok) {
-      console.error('[SumUp] Checkout error full:', JSON.stringify(checkoutData))
       return NextResponse.json(
         {
           error: checkoutData?.message ?? 'Error creando checkout en SumUp',
           sumup_error: checkoutData,
-          api_key_present: !!apiKey,
-          merchant_code: merchantCode,
         },
         { status: 400 }
       )
     }
 
     const paymentUrl = checkoutData.hosted_checkout_url
-    const checkoutId = checkoutData.id
 
     if (!paymentUrl) {
       return NextResponse.json(
@@ -82,20 +73,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    console.log('[SumUp] Checkout created:', checkoutId, paymentUrl)
+    console.log('[SumUp] Checkout created:', checkoutData.id, paymentUrl)
 
     return NextResponse.json({
       success: true,
-      checkout_id: checkoutId,
+      checkout_id: checkoutData.id,
       checkout_reference: checkoutRef,
       payment_url: paymentUrl,
     })
 
   } catch (error: any) {
     console.error('[SumUp] Error:', error)
-    return NextResponse.json(
-      { error: error?.message ?? 'Error interno' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: error?.message ?? 'Error interno' }, { status: 500 })
   }
 }
