@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,7 +8,7 @@ export async function POST(req: NextRequest) {
     }
 
     const apiKey       = process.env.SUMUP_API_KEY
-    const merchantCode = process.env.SUMUP_MERCHANT_CODE ?? 'MGSXCYTL'
+    const merchantCode = process.env.SUMUP_MERCHANT_CODE ?? 'M0KP75HN'
 
     if (!apiKey) {
       return NextResponse.json(
@@ -28,8 +27,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://armerch-poud.vercel.app'
+    const appUrl      = process.env.NEXT_PUBLIC_APP_URL ?? 'https://armerch.com'
     const checkoutRef = order_id ?? `arm-${Date.now()}`
+
+    console.log('[SumUp] return_url:', `${appUrl}/api/sumup/webhook`)
+    console.log('[SumUp] redirect_url:', `${appUrl}/payment/success`)
 
     const checkoutRes = await fetch('https://api.sumup.com/v0.1/checkouts', {
       method: 'POST',
@@ -39,15 +41,13 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         checkout_reference: checkoutRef,
-        amount: Number(amount),
+        amount:             Number(amount),
         currency,
-        merchant_code: merchantCode,
+        merchant_code:      merchantCode,
         description,
-        hosted_checkout: { enabled: true },
-        // return_url = SumUp llama este endpoint (POST) cuando el checkout cambia de estado
-        return_url: `${appUrl}/api/sumup/webhook`,
-        // redirect_url = donde va el cliente en su browser tras pagar
-        redirect_url: `${appUrl}/payment=success`,
+        hosted_checkout:    { enabled: true },
+        return_url:         `${appUrl}/api/sumup/webhook`,
+        redirect_url:       `${appUrl}/payment/success`,
       }),
     })
 
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     if (!checkoutRes.ok) {
       return NextResponse.json(
         {
-          error: checkoutData?.message ?? 'Error creando checkout en SumUp',
+          error:       checkoutData?.message ?? 'Error creando checkout en SumUp',
           sumup_error: checkoutData,
         },
         { status: 400 }
@@ -76,10 +76,10 @@ export async function POST(req: NextRequest) {
     console.log('[SumUp] Checkout created:', checkoutData.id, paymentUrl)
 
     return NextResponse.json({
-      success: true,
-      checkout_id: checkoutData.id,
+      success:            true,
+      checkout_id:        checkoutData.id,
       checkout_reference: checkoutRef,
-      payment_url: paymentUrl,
+      payment_url:        paymentUrl,
     })
 
   } catch (error: any) {
