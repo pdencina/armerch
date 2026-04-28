@@ -555,35 +555,35 @@ export default function Cart() {
         </div>
       </aside>
 
+      {/* Link de pago enviado */}
+      {linkSentOpen && createdOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-3xl border border-zinc-700 bg-zinc-900 p-8 text-center shadow-2xl">
+            <div className="mb-4 text-6xl">📱</div>
+            <h2 className="mb-2 text-xl font-bold text-white">Link de pago enviado</h2>
+            <p className="mb-1 text-sm text-zinc-400">
+              Se envió el link de pago por WhatsApp al cliente.
+            </p>
+            <p className="mb-6 text-xs text-zinc-600">
+              La orden #{createdOrder.number} quedará confirmada automáticamente cuando el cliente complete el pago.
+            </p>
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 mb-6">
+              <p className="text-xs text-amber-400">
+                ⏳ Estado actual: <strong>Pendiente de pago</strong>
+              </p>
+            </div>
+            <button
+              onClick={() => setLinkSentOpen(false)}
+              className="w-full rounded-2xl bg-amber-500 py-3 text-sm font-bold text-black transition hover:bg-amber-400"
+            >
+              Continuar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* MODAL ÉXITO */}
       {createdOrder && (
-        {/* Link de pago enviado */}
-        {linkSentOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-            <div className="w-full max-w-sm rounded-3xl border border-zinc-700 bg-zinc-900 p-8 text-center shadow-2xl">
-              <div className="mb-4 text-6xl">📱</div>
-              <h2 className="mb-2 text-xl font-bold text-white">Link de pago enviado</h2>
-              <p className="mb-1 text-sm text-zinc-400">
-                Se envió el link de pago por WhatsApp al cliente.
-              </p>
-              <p className="mb-6 text-xs text-zinc-600">
-                La orden #{createdOrder?.number} quedará confirmada automáticamente cuando el cliente complete el pago.
-              </p>
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 px-4 py-3 mb-6">
-                <p className="text-xs text-amber-400">
-                  ⏳ Estado actual: <strong>Pendiente de pago</strong>
-                </p>
-              </div>
-              <button
-                onClick={() => { setLinkSentOpen(false) }}
-                className="w-full rounded-2xl bg-amber-500 py-3 text-sm font-bold text-black transition hover:bg-amber-400"
-              >
-                Continuar
-              </button>
-            </div>
-          </div>
-        )}
-
         <SaleSuccessModal
           open={successOpen}
           orderId={createdOrder.id}
