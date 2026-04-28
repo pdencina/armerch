@@ -560,23 +560,39 @@ export default function Cart() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-sm rounded-3xl border border-zinc-700 bg-zinc-900 p-8 text-center shadow-2xl">
             <div className="mb-4 text-6xl">📱</div>
-            <h2 className="mb-2 text-xl font-bold text-white">Link de pago enviado</h2>
+            <h2 className="mb-3 text-xl font-bold text-white">Link enviado al cliente</h2>
             <p className="mb-1 text-sm text-zinc-400">
-              Se envió el link de pago por WhatsApp al cliente.
+              Orden <span className="font-bold text-white">#{createdOrder.number}</span>
             </p>
-            <p className="mb-6 text-xs text-zinc-600">
-              La orden #{createdOrder.number} quedará confirmada automáticamente cuando el cliente complete el pago.
+            <p className="mb-5 text-sm text-zinc-500">
+              El cliente recibirá el link por WhatsApp para pagar con tarjeta, Apple Pay o Google Pay.
             </p>
-            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 mb-6">
-              <p className="text-xs text-amber-400">
-                ⏳ Estado actual: <strong>Pendiente de pago</strong>
-              </p>
+
+            {/* Estado visual */}
+            <div className="rounded-2xl border border-zinc-700 bg-zinc-800 px-4 py-4 mb-6 text-left space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-500">Estado orden</span>
+                <span className="font-semibold text-amber-400">⏳ Pendiente de pago</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-500">Stock descontado</span>
+                <span className="font-semibold text-zinc-400">No — se descuenta al pagar</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-500">Confirmación</span>
+                <span className="font-semibold text-zinc-400">Automática al pagar</span>
+              </div>
             </div>
+
+            <p className="mb-5 text-xs text-zinc-600">
+              Si el cliente no paga, la orden quedará pendiente sin afectar el inventario.
+            </p>
+
             <button
-              onClick={() => setLinkSentOpen(false)}
+              onClick={() => { setLinkSentOpen(false); clearCart() }}
               className="w-full rounded-2xl bg-amber-500 py-3 text-sm font-bold text-black transition hover:bg-amber-400"
             >
-              Continuar
+              Nueva venta
             </button>
           </div>
         </div>
