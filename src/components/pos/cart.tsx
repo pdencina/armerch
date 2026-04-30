@@ -250,7 +250,7 @@ export default function Cart() {
             size: i.size ?? null,
           })),
           client_name: clientName.trim(),
-          client_email: clientEmail.trim() || null,
+          client_email: clientEmail.trim() || '',
           client_phone: clientPhone.trim() || null,
           notes: `Smart POS · TX: ${data.transaction.tx_code} · ${data.transaction.card_type ?? ''}`,
           discount: 0,
