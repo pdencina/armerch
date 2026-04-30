@@ -311,7 +311,7 @@ export default function Cart() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authSession.access_token}` },
           body: JSON.stringify({
-            payment_method: 'sumup',
+            payment_method: 'credito', // Smart POS cobra con tarjeta
             items: items.map(i => ({ product_id: i.product.id, quantity: i.quantity, size: i.size ?? null, unit_price: i.product.price })),
             client_name: clientName.trim() || null,
             client_email: clientEmail.trim() || null,
