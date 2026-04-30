@@ -168,8 +168,16 @@ export default function Cart() {
   } = useCart()
 
   // ── UI state ──
+  // Cleanup polling on unmount
+  useEffect(() => () => { if (sumupPollRef.current) clearInterval(sumupPollRef.current) }, [])
+
   const [clientPhone, setClientPhone] = useState('')
   const [paymentLinkUrl, setPaymentLinkUrl] = useState<string | null>(null)
+  const [sumupSmartOpen, setSumupSmartOpen] = useState(false)
+  const [sumupSmartOrder, setSumupSmartOrder] = useState<{ id: string; number: string | number; total: number } | null>(null)
+  const [sumupPolling, setSumupPolling] = useState(false)
+  const [sumupStatus, setSumupStatus] = useState<'waiting' | 'found' | 'timeout'>('waiting')
+  const sumupPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [showNotes, setShowNotes] = useState(false)
   const [isPendingDelivery, setIsPendingDelivery] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -178,8 +186,6 @@ export default function Cart() {
   const [createdOrder, setCreatedOrder] = useState<{
     id: string; number: number | string; total: number; emailSent?: boolean
   } | null>(null)
-
-  const [linkOrderStatus, setLinkOrderStatus] = useState<'pending' | 'paid' | 'cancelled' | null>(null)
 
   const canSubmit = useMemo(
     () => items.length > 0 && clientName.trim().length > 0 && !submitting,
@@ -192,9 +198,87 @@ export default function Cart() {
     { key: 'debito',        label: 'Débito',      icon: CreditCard },
     { key: 'credito',       label: 'Crédito',     icon: Wallet    },
     { key: 'link',          label: 'Link pago',   icon: Link      },
+    { key: 'sumup',         label: 'Smart POS',   icon: CreditCard },
   ]
 
   // ── confirmar venta ──
+  // ── Verificar pago Smart POS en SumUp ─────────────────────────────────────
+  async function handleVerifySumup() {
+    setVerifying(true)
+    setVerifyError(null)
+    setVerifySuccess(null)
+
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+
+      const res = await fetch('/api/sumup/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+        },
+        body: JSON.stringify({ amount: total() }),
+      })
+      const data = await res.json()
+
+      if (!data.found) {
+        setVerifyError(data.message ?? 'No se encontró la transacción')
+        setVerifying(false)
+        return
+      }
+
+      // Transacción encontrada — registrar la venta
+      setVerifySuccess(`✅ Pago verificado · ${data.transaction.card_type ?? 'Tarjeta'} · TX: ${data.transaction.tx_code}`)
+
+      // Crear la orden
+      const orderRes = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+        },
+        body: JSON.stringify({
+          payment_method: 'credito',
+          items: items.map(i => ({
+            product_id: i.product.id,
+            quantity: i.quantity,
+            unit_price: i.product.price,
+            size: i.size ?? null,
+          })),
+          client_name: clientName.trim(),
+          client_email: clientEmail.trim() || null,
+          client_phone: clientPhone.trim() || null,
+          notes: `Smart POS · TX: ${data.transaction.tx_code} · ${data.transaction.card_type ?? ''}`,
+          discount: 0,
+        }),
+      })
+      const orderData = await orderRes.json()
+
+      if (!orderRes.ok) {
+        setVerifyError(orderData.error ?? 'Error registrando la orden')
+        setVerifying(false)
+        return
+      }
+
+      // Éxito
+      setSumupSmartOpen(false)
+      setCreatedOrder({
+        id: orderData.order_id,
+        number: orderData.order_number ?? orderData.order_id,
+        total: total(),
+        emailSent: orderData.email_sent,
+      })
+      setSuccessOpen(true)
+      setClientPhone('')
+      clearCart()
+
+    } catch (e: any) {
+      setVerifyError(e.message ?? 'Error inesperado')
+    }
+    setVerifying(false)
+  }
+
   async function handleConfirmSale() {
     if (!canSubmit) return
     setSubmitting(true)
@@ -212,6 +296,73 @@ export default function Cart() {
         .select('campus_id')
         .eq('id', session.user.id)
         .single()
+
+      // ── Si es Smart POS, crear orden pending y esperar pago ──
+      if (paymentMethod === 'sumup') {
+        // 1. Crear orden en Supabase como pending
+        const supabase = createClient()
+        const { data: { session: authSession } } = await supabase.auth.getSession()
+        if (!authSession?.access_token) { alert('Sin sesión'); return }
+
+        const orderRes = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authSession.access_token}` },
+          body: JSON.stringify({
+            payment_method: 'sumup',
+            items: items.map(i => ({ product_id: i.product.id, quantity: i.quantity, size: i.size ?? null, unit_price: i.product.price })),
+            client_name: clientName.trim() || null,
+            client_email: clientEmail.trim() || null,
+            client_phone: clientPhone.trim() || null,
+            notes: 'Smart POS SumUp - pendiente de pago',
+            delivery_status: isPendingDelivery ? 'pending' : null,
+          }),
+        })
+        const orderData = await orderRes.json()
+        if (!orderRes.ok) { alert(orderData.error ?? 'Error creando orden'); return }
+
+        const orderId     = orderData.order_id
+        const orderNumber = orderData.order_number ?? orderId
+        const orderTotal  = total()
+
+        // 2. Mostrar modal de espera
+        setSumupSmartOrder({ id: orderId, number: orderNumber, total: orderTotal })
+        setSumupStatus('waiting')
+        setSumupSmartOpen(true)
+        clearCart()
+        setClientPhone('')
+        setIsPendingDelivery(false)
+
+        // 3. Iniciar polling cada 4 segundos
+        let attempts = 0
+        const maxAttempts = 45 // 3 minutos
+
+        sumupPollRef.current = setInterval(async () => {
+          attempts++
+          if (attempts > maxAttempts) {
+            clearInterval(sumupPollRef.current!)
+            setSumupStatus('timeout')
+            return
+          }
+
+          try {
+            const verifyRes = await fetch('/api/sumup/verify-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authSession.access_token}` },
+              body: JSON.stringify({ order_id: orderId, amount: orderTotal }),
+            })
+            const verifyData = await verifyRes.json()
+
+            if (verifyData.found) {
+              clearInterval(sumupPollRef.current!)
+              setSumupStatus('found')
+            }
+          } catch (e) {
+            console.error('SumUp verify error:', e)
+          }
+        }, 4000)
+
+        return // No continuar con el flujo normal
+      }
 
       // ── Si es link de pago, crear checkout en SumUp primero ──
       if (paymentMethod === 'link' && clientPhone.trim()) {
@@ -320,36 +471,6 @@ export default function Cart() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [canSubmit, paymentMethod, items.length, clientName])
 
-
-  // ── Realtime: escuchar cambio de estado de la orden con link de pago ──────
-  useEffect(() => {
-    if (!linkSentOpen || !createdOrder?.id) return
-
-    setLinkOrderStatus('pending')
-
-    const channel = supabase
-      .channel(`order-status-${createdOrder.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'orders',
-          filter: `id=eq.${createdOrder.id}`,
-        },
-        (payload) => {
-          const newStatus = (payload.new as any).status
-          if (newStatus === 'paid') {
-            setLinkOrderStatus('paid')
-          } else if (newStatus === 'cancelled') {
-            setLinkOrderStatus('cancelled')
-          }
-        }
-      )
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [linkSentOpen, createdOrder?.id])
 
   // ─── render ───────────────────────────────────────────────────────────────
   return (
@@ -589,69 +710,161 @@ export default function Cart() {
         </div>
       </aside>
 
+      {/* Smart POS — Esperando pago */}
+      {sumupSmartOpen && sumupSmartOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-3xl border border-zinc-700 bg-zinc-900 p-8 text-center shadow-2xl">
+
+            {sumupStatus === 'waiting' && (
+              <>
+                <div className="mb-5 flex justify-center">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-amber-500/30">
+                    <div className="h-12 w-12 animate-spin rounded-full border-4 border-zinc-700 border-t-amber-500" />
+                  </div>
+                </div>
+                <h2 className="mb-2 text-xl font-bold text-white">Esperando pago</h2>
+                <p className="mb-1 text-sm text-zinc-400">Cobra en el Smart POS de SumUp</p>
+                <p className="mb-5 text-xs text-zinc-600">El sistema detectará el pago automáticamente</p>
+                <div className="rounded-2xl border border-zinc-700 bg-zinc-800 px-4 py-4 mb-6 text-left space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-500">Orden</span>
+                    <span className="font-bold text-white">#{sumupSmartOrder.number}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-500">Total a cobrar</span>
+                    <span className="font-bold text-amber-400 text-base">
+                      {new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(sumupSmartOrder.total)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-500">Estado</span>
+                    <span className="text-amber-400">⏳ Esperando cobro en Smart POS</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { clearInterval(sumupPollRef.current!); setSumupSmartOpen(false) }}
+                  className="w-full rounded-2xl border border-zinc-700 py-2.5 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-white"
+                >
+                  Cancelar
+                </button>
+              </>
+            )}
+
+            {sumupStatus === 'found' && (
+              <>
+                <div className="mb-4 text-6xl">✅</div>
+                <h2 className="mb-2 text-xl font-bold text-white">¡Pago confirmado!</h2>
+                <p className="mb-1 text-sm text-zinc-400">Orden <strong className="text-white">#{sumupSmartOrder.number}</strong></p>
+                <p className="mb-6 text-xs text-zinc-600">El pago fue detectado en SumUp y la venta fue registrada.</p>
+                <button
+                  onClick={() => setSumupSmartOpen(false)}
+                  className="w-full rounded-2xl bg-green-500 py-3 text-sm font-bold text-white transition hover:bg-green-400"
+                >
+                  Nueva venta
+                </button>
+              </>
+            )}
+
+            {sumupStatus === 'timeout' && (
+              <>
+                <div className="mb-4 text-6xl">⏱️</div>
+                <h2 className="mb-2 text-xl font-bold text-white">Tiempo de espera agotado</h2>
+                <p className="mb-1 text-sm text-zinc-400">No se detectó el pago en 3 minutos.</p>
+                <p className="mb-6 text-xs text-zinc-600">La orden #{sumupSmartOrder.number} quedó pendiente. Puedes confirmarla manualmente en Órdenes si el cliente pagó.</p>
+                <button
+                  onClick={() => setSumupSmartOpen(false)}
+                  className="w-full rounded-2xl bg-zinc-700 py-3 text-sm font-bold text-white transition hover:bg-zinc-600"
+                >
+                  Cerrar
+                </button>
+              </>
+            )}
+
+          </div>
+        </div>
+      )}
+
+      {/* Smart POS Modal */}
+      {sumupSmartOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-3xl border border-zinc-700 bg-zinc-900 p-8 text-center shadow-2xl">
+            <div className="mb-4 text-5xl">🖥️</div>
+            <h2 className="mb-2 text-xl font-bold text-white">Cobro con Smart POS</h2>
+            <p className="mb-2 text-sm text-zinc-400">Total a cobrar:</p>
+            <p className="mb-6 text-3xl font-black text-amber-400">
+              {new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(total())}
+            </p>
+
+            <div className="mb-6 rounded-2xl border border-zinc-700 bg-zinc-800 p-4 text-left space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-3">Instrucciones</p>
+              <div className="flex items-start gap-2 text-sm text-zinc-300">
+                <span className="shrink-0 font-bold text-amber-400">1.</span>
+                <span>Cobra <strong>{new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(total())}</strong> en el Smart POS físicamente</span>
+              </div>
+              <div className="flex items-start gap-2 text-sm text-zinc-300">
+                <span className="shrink-0 font-bold text-amber-400">2.</span>
+                <span>Espera que el cliente pase la tarjeta y el pago sea aprobado</span>
+              </div>
+              <div className="flex items-start gap-2 text-sm text-zinc-300">
+                <span className="shrink-0 font-bold text-amber-400">3.</span>
+                <span>Presiona <strong>"Confirmar pago"</strong> — el sistema verificará automáticamente con SumUp</span>
+              </div>
+            </div>
+
+            {verifyError && (
+              <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-400">
+                ❌ {verifyError}
+              </div>
+            )}
+
+            {verifySuccess && (
+              <div className="mb-4 rounded-xl border border-green-500/20 bg-green-500/10 p-3 text-xs text-green-400">
+                {verifySuccess}
+              </div>
+            )}
+
+            <button
+              onClick={handleVerifySumup}
+              disabled={verifying}
+              className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-500 py-3 text-sm font-bold text-black transition hover:bg-amber-400 disabled:opacity-50"
+            >
+              {verifying
+                ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black" /> Verificando con SumUp...</>
+                : '✅ Confirmar pago recibido'}
+            </button>
+
+            <button
+              onClick={() => { setSumupSmartOpen(false); setVerifyError(null); setSubmitting(false) }}
+              className="w-full text-center text-xs text-zinc-600 hover:text-zinc-400 transition"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Link de pago enviado */}
       {linkSentOpen && createdOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-sm rounded-3xl border border-zinc-700 bg-zinc-900 p-8 text-center shadow-2xl">
-
-            {/* Ícono dinámico según estado */}
-            <div className="mb-4 text-6xl">
-              {linkOrderStatus === 'paid' ? '✅' : linkOrderStatus === 'cancelled' ? '❌' : '📱'}
-            </div>
-
-            {/* Título dinámico */}
-            <h2 className="mb-3 text-xl font-bold text-white">
-              {linkOrderStatus === 'paid'
-                ? '¡Pago confirmado!'
-                : linkOrderStatus === 'cancelled'
-                ? 'Pago rechazado'
-                : 'Link enviado al cliente'}
-            </h2>
-
+            <div className="mb-4 text-6xl">📱</div>
+            <h2 className="mb-3 text-xl font-bold text-white">Link enviado al cliente</h2>
             <p className="mb-1 text-sm text-zinc-400">
               Orden <span className="font-bold text-white">#{createdOrder.number}</span>
             </p>
-
-            {linkOrderStatus === 'paid' ? (
-              <p className="mb-5 text-sm text-green-400 font-semibold">
-                El pago fue procesado. El stock ya fue descontado automáticamente.
-              </p>
-            ) : linkOrderStatus === 'cancelled' ? (
-              <p className="mb-5 text-sm text-red-400">
-                El pago fue rechazado o expiró. El stock no fue afectado.
-              </p>
-            ) : (
-              <p className="mb-5 text-sm text-zinc-500">
-                El cliente recibirá el link por WhatsApp para pagar con tarjeta, Apple Pay o Google Pay.
-              </p>
-            )}
+            <p className="mb-5 text-sm text-zinc-500">
+              El cliente recibirá el link por WhatsApp para pagar con tarjeta, Apple Pay o Google Pay.
+            </p>
 
             {/* Estado visual */}
-            <div className={`rounded-2xl border px-4 py-4 mb-6 text-left space-y-2 transition-all ${
-              linkOrderStatus === 'paid'
-                ? 'border-green-500/40 bg-green-500/10'
-                : linkOrderStatus === 'cancelled'
-                ? 'border-red-500/40 bg-red-500/10'
-                : 'border-zinc-700 bg-zinc-800'
-            }`}>
+            <div className="rounded-2xl border border-zinc-700 bg-zinc-800 px-4 py-4 mb-6 text-left space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-zinc-500">Estado orden</span>
-                {linkOrderStatus === 'paid' ? (
-                  <span className="font-semibold text-green-400">✅ Pagado</span>
-                ) : linkOrderStatus === 'cancelled' ? (
-                  <span className="font-semibold text-red-400">❌ Cancelado</span>
-                ) : (
-                  <span className="font-semibold text-amber-400 flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-                    Esperando pago...
-                  </span>
-                )}
+                <span className="font-semibold text-amber-400">⏳ Pendiente de pago</span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-zinc-500">Stock descontado</span>
-                <span className={`font-semibold ${linkOrderStatus === 'paid' ? 'text-green-400' : 'text-zinc-400'}`}>
-                  {linkOrderStatus === 'paid' ? 'Sí — descontado' : 'No — se descuenta al pagar'}
-                </span>
+                <span className="font-semibold text-zinc-400">No — se descuenta al pagar</span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-zinc-500">Confirmación</span>
@@ -659,21 +872,13 @@ export default function Cart() {
               </div>
             </div>
 
-            {linkOrderStatus === null || linkOrderStatus === 'pending' ? (
-              <p className="mb-5 text-xs text-zinc-600">
-                Esta pantalla se actualizará automáticamente cuando el cliente pague.
-              </p>
-            ) : null}
+            <p className="mb-5 text-xs text-zinc-600">
+              Si el cliente no paga, la orden quedará pendiente sin afectar el inventario.
+            </p>
 
             <button
-              onClick={() => { setLinkSentOpen(false); setLinkOrderStatus(null); clearCart() }}
-              className={`w-full rounded-2xl py-3 text-sm font-bold text-black transition ${
-                linkOrderStatus === 'paid'
-                  ? 'bg-green-500 hover:bg-green-400'
-                  : linkOrderStatus === 'cancelled'
-                  ? 'bg-red-500 hover:bg-red-400 text-white'
-                  : 'bg-amber-500 hover:bg-amber-400'
-              }`}
+              onClick={() => { setLinkSentOpen(false); clearCart() }}
+              className="w-full rounded-2xl bg-amber-500 py-3 text-sm font-bold text-black transition hover:bg-amber-400"
             >
               Nueva venta
             </button>

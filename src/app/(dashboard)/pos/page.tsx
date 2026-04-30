@@ -1,27 +1,78 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import ProductGrid from '@/components/pos/product-grid'
 import Cart from '@/components/pos/cart'
-import { Wifi, WifiOff, RefreshCw, Store } from 'lucide-react'
 
 export default function POSPage() {
   const [products, setProducts] = useState<any[]>([])
   const [categories, setCategories] = useState<any[]>([])
   const [campusName, setCampusName] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
-  const [online, setOnline] = useState(true)
 
-  const load = useCallback(async () => {
+  const searchParams = useSearchParams()
+  const [sumupResult, setSumupResult] = useState<{ status: string; txCode?: string; ref?: string } | null>(null)
+
+  // ── Detect SumUp callback when app returns ────────────────────────────────
+  useEffect(() => {
+    const smpStatus = searchParams?.get('smp-status')
+    const smpRef    = searchParams?.get('smp-ref')
+    const smpTx     = searchParams?.get('smp-tx-code')
+
+    if (smpStatus) {
+      setSumupResult({ status: smpStatus, txCode: smpTx ?? undefined, ref: smpRef ?? undefined })
+
+      // Register the order if payment succeeded
+      if (smpStatus === 'success' && (window as any).__sumupSmartRef === smpRef) {
+        const registerOrder = async () => {
+          try {
+            const supabase = createClient()
+            const { data: { session } } = await supabase.auth.getSession()
+            if (!session?.access_token) return
+
+            await fetch('/api/orders', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({
+                payment_method: 'credito', // SumUp card payment
+                items: JSON.parse((window as any).__sumupSmartItems || '[]').map((i: any) => ({
+                  product_id: i.id,
+                  quantity: i.qty,
+                  size: i.size,
+                })),
+                notes: `SumUp Smart POS | TX: ${smpTx} | Ref: ${smpRef}`,
+                total: (window as any).__sumupSmartTotal,
+              }),
+            })
+
+            // Cleanup
+            delete (window as any).__sumupSmartRef
+            delete (window as any).__sumupSmartTotal
+            delete (window as any).__sumupSmartItems
+
+            // Remove query params from URL
+            window.history.replaceState({}, '', '/pos')
+          } catch (e) {
+            console.error('Error registering SumUp order:', e)
+          }
+        }
+        registerOrder()
+      }
+    }
+  }, [searchParams])
+
+  useEffect(() => {
     const supabase = createClient()
-    setLoading(true)
 
-    try {
+    async function load() {
       const {
         data: { session },
       } = await supabase.auth.getSession()
+
       if (!session) return
 
       const { data: profile } = await supabase
@@ -31,7 +82,8 @@ export default function POSPage() {
         .single()
 
       const campusId = profile?.campus_id ?? null
-      setCampusName((profile?.campus as any)?.name ?? null)
+      const cName = (profile?.campus as any)?.name ?? null
+      setCampusName(cName)
 
       let query = supabase
         .from('products_with_stock')
@@ -57,110 +109,30 @@ export default function POSPage() {
 
       setProducts(p ?? [])
       setCategories(c ?? [])
-      setLastUpdate(new Date())
-    } finally {
-      setLoading(false)
     }
-  }, [])
 
-  useEffect(() => {
     load()
-
-    // Suscripción realtime para actualización de inventario
-    const supabase = createClient()
-    const channel = supabase
-      .channel('pos-inventory')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'products_with_stock' },
-        () => load()
-      )
-      .subscribe()
-
-    // Estado de conexión
-    const handleOnline = () => setOnline(true)
-    const handleOffline = () => setOnline(false)
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-
-    return () => {
-      supabase.removeChannel(channel)
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-    }
-  }, [load])
+  }, [])
 
   return (
     <div className="flex h-[calc(100vh-70px)] flex-col bg-black">
-
-      {/* BARRA DE ESTADO */}
-      <div className="shrink-0 border-b border-zinc-800/60 px-5 py-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Store size={14} className="text-zinc-500" />
-              <span className="text-xs text-zinc-500">Punto de Venta</span>
-              {campusName && (
-                <>
-                  <span className="text-zinc-700">—</span>
-                  <span className="text-xs font-semibold text-slate-300">{campusName}</span>
-                </>
-              )}
-            </div>
-
-            {!loading && (
-              <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-500">
-                {products.length} productos
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Indicador online/offline */}
-            <div className={`flex items-center gap-1.5 text-xs ${online ? 'text-emerald-500' : 'text-red-400'}`}>
-              {online ? <Wifi size={13} /> : <WifiOff size={13} />}
-              <span className="hidden sm:inline">{online ? 'En línea' : 'Sin conexión'}</span>
-            </div>
-
-            {/* Última actualización */}
-            {lastUpdate && (
-              <span className="hidden text-[10px] text-zinc-600 md:inline">
-                Act. {lastUpdate.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            )}
-
-            {/* Botón refresh manual */}
-            <button
-              onClick={load}
-              disabled={loading}
-              className="rounded-lg p-1.5 text-zinc-600 transition hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-50"
-              aria-label="Actualizar productos"
-            >
-              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-            </button>
+      {campusName && (
+        <div className="shrink-0 border-b border-zinc-800 px-5 py-3">
+          <div className="flex items-center gap-2 text-sm">
+            <div className="h-2 w-2 rounded-full bg-slate-400" />
+            <span className="text-zinc-400">Punto de Venta —</span>
+            <span className="font-semibold text-slate-300">{campusName}</span>
+            <span className="text-zinc-600">· {products.length} productos</span>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* LAYOUT PRINCIPAL: grilla + carrito */}
-      <div className="grid flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[1fr_400px]">
-
-        {/* GRILLA DE PRODUCTOS */}
-        <div className="min-h-0 overflow-hidden border-r border-zinc-800/60">
-          {loading && products.length === 0 ? (
-            <div className="flex h-full items-center justify-center">
-              <div className="flex flex-col items-center gap-3">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-700 border-t-amber-500" />
-                <p className="text-sm text-zinc-600">Cargando productos...</p>
-              </div>
-            </div>
-          ) : (
-            <ProductGrid products={products} categories={categories} />
-          )}
+      <div className="grid flex-1 grid-cols-1 gap-4 overflow-hidden p-4 xl:grid-cols-[1fr_380px]">
+        <div className="min-h-0 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950">
+          <ProductGrid products={products} categories={categories} />
         </div>
 
-        {/* CARRITO */}
-        <div className="min-h-0 overflow-hidden">
+        <div className="min-h-0 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950">
           <Cart />
         </div>
       </div>

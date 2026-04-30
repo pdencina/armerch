@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+// ─── POST /api/sumup/checkout ──────────────────────────────────────────────────
+// Crea un Hosted Checkout en SumUp y retorna la URL de pago.
+// El frontend envía esa URL por WhatsApp al cliente.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,7 +14,7 @@ export async function POST(req: NextRequest) {
     }
 
     const apiKey       = process.env.SUMUP_API_KEY
-    const merchantCode = process.env.SUMUP_MERCHANT_CODE ?? 'M0KP75HN'
+    const merchantCode = process.env.SUMUP_MERCHANT_CODE ?? 'MGSXCYTL'
 
     if (!apiKey) {
       return NextResponse.json(
@@ -27,46 +33,48 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const appUrl      = process.env.NEXT_PUBLIC_APP_URL ?? 'https://armerch.com'
+    // ── Crear Hosted Checkout en SumUp ────────────────────────────────────────
     const checkoutRef = order_id ?? `arm-${Date.now()}`
-
-    console.log('[SumUp] Creating checkout:', { amount, currency, merchantCode, appUrl })
-
     const checkoutRes = await fetch('https://api.sumup.com/v0.1/checkouts', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type':  'application/json',
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         checkout_reference: checkoutRef,
-        amount:             Number(amount),
-        currency,
-        merchant_code:      merchantCode,
+        amount: Number(amount),
+        currency: currency ?? 'CLP',
+        merchant_code: merchantCode,
         description,
-        hosted_checkout:    { enabled: true },
-        // SumUp llama este endpoint cuando el pago cambia de estado
-        return_url:         `${appUrl}/api/sumup/webhook`,
-        // El cliente es redirigido aquí tras pagar
-        redirect_url:       `${appUrl}/payment/success`,
+        hosted_checkout: {
+          enabled: true,
+        },
+        // return_url = webhook que SumUp llama cuando el pago se completa
+        return_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://armerch-poud.vercel.app'}/api/sumup/webhook`,
+        // redirect_url = donde va el cliente tras pagar (página de éxito)
+        redirect_url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://armerch-poud.vercel.app'}/pos?payment=success`,
       }),
     })
 
     const checkoutData = await checkoutRes.json()
-    console.log('[SumUp] Checkout response:', JSON.stringify(checkoutData))
 
     if (!checkoutRes.ok) {
-      console.error('[SumUp] Checkout error:', JSON.stringify(checkoutData))
+      console.error('[SumUp] Checkout error full:', JSON.stringify(checkoutData))
       return NextResponse.json(
         {
-          error:       checkoutData?.message ?? 'Error creando checkout en SumUp',
+          error: checkoutData?.message ?? 'Error creando checkout en SumUp',
           sumup_error: checkoutData,
+          api_key_present: !!apiKey,
+          merchant_code: merchantCode,
         },
         { status: 400 }
       )
     }
 
     const paymentUrl = checkoutData.hosted_checkout_url
+    const checkoutId = checkoutData.id
+
     if (!paymentUrl) {
       return NextResponse.json(
         { error: 'SumUp no retornó URL de pago. Verifica que tu cuenta tenga Hosted Checkout habilitado.' },
@@ -74,17 +82,20 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    console.log('[SumUp] Checkout created:', checkoutData.id, paymentUrl)
+    console.log('[SumUp] Checkout created:', checkoutId, paymentUrl)
 
     return NextResponse.json({
-      success:            true,
-      checkout_id:        checkoutData.id,
+      success: true,
+      checkout_id: checkoutId,
       checkout_reference: checkoutRef,
-      payment_url:        paymentUrl,
+      payment_url: paymentUrl,
     })
 
   } catch (error: any) {
     console.error('[SumUp] Error:', error)
-    return NextResponse.json({ error: error?.message ?? 'Error interno' }, { status: 500 })
+    return NextResponse.json(
+      { error: error?.message ?? 'Error interno' },
+      { status: 500 }
+    )
   }
 }

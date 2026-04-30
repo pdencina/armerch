@@ -19,3 +19,7 @@ FROM pg_enum
 JOIN pg_type ON pg_type.oid = pg_enum.enumtypid
 WHERE pg_type.typname = 'payment_method'
 ORDER BY enumsortorder;
+
+
+-- Agregar 'sumup' al enum payment_method para Smart POS
+ALTER TYPE payment_method ADD VALUE IF NOT EXISTS 'sumup';

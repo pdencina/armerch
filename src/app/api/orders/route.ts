@@ -237,10 +237,8 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Email con Resend ──
-    // Solo enviar voucher si el pago fue confirmado (no para pagos por link pendientes)
     let emailSent = false
-    const shouldSendEmail = clientEmail && process.env.RESEND_API_KEY && paymentMethod !== 'link'
-    if (shouldSendEmail) {
+    if (clientEmail && process.env.RESEND_API_KEY) {
       try {
         const { Resend } = await import('resend')
         const resend = new Resend(process.env.RESEND_API_KEY)
