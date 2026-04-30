@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
     const res = await fetch(
       `https://api.sumup.com/v2.1/merchants/${merchantCode}/transactions/history` +
-      `?statuses=SUCCESSFUL&limit=5&oldest_time=${since}`,
+      `?limit=10&oldest_time=${encodeURIComponent(since)}`,
       {
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -43,7 +43,9 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await res.json()
-    const transactions: any[] = data.items ?? []
+    // Filter only successful transactions in code (SumUp API doesn't support statuses array)
+    const allTx: any[] = data.items ?? []
+    const transactions = allTx.filter(tx => tx.status === 'SUCCESSFUL' || tx.status === 'successful')
 
     if (transactions.length === 0) {
       return NextResponse.json({
