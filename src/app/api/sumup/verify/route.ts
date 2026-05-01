@@ -14,13 +14,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'amount requerido' }, { status: 400 })
     }
 
-    // Buscar transacciones de los últimos 15 minutos
-    const since = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+    const targetAmount = Number(amount)
 
-    // Try v0.1 transactions endpoint (compatible with Smart POS)
+    // ── Buscar las últimas transacciones en orden DESCENDENTE ─────────────────
+    // SumUp por defecto devuelve ASC (las más antiguas primero)
+    // Usamos order=descending para obtener las más recientes
     const res = await fetch(
       `https://api.sumup.com/v0.1/me/transactions/history` +
-      `?limit=10&oldest_time=${encodeURIComponent(since)}`,
+      `?limit=10&order=descending`,
       {
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -30,83 +31,76 @@ export async function POST(req: NextRequest) {
     )
 
     if (!res.ok) {
-      // Fallback to v2.1 merchant endpoint
-      const res2 = await fetch(
-        `https://api.sumup.com/v2.1/merchants/${merchantCode}/transactions/history` +
-        `?limit=10&oldest_time=${encodeURIComponent(since)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-        }
+      const err = await res.json().catch(() => ({}))
+      console.error('[SumUp Verify] API error:', err)
+      return NextResponse.json(
+        { error: 'Error consultando SumUp', details: err },
+        { status: 400 }
       )
-      
-      if (!res2.ok) {
-        const err = await res2.json().catch(() => ({}))
-        console.error('[SumUp Verify] Both endpoints failed:', err)
-        return NextResponse.json(
-          { error: 'Error consultando SumUp', details: err, endpoint_tried: 'v2.1' },
-          { status: 400 }
-        )
-      }
-      
-      const data2 = await res2.json()
-      return processTransactions(data2, amount)
     }
 
     const data = await res.json()
-    return processTransactions(data, amount)
+    const allTx: any[] = data.items ?? []
+
+    console.log('[SumUp Verify] Transactions found:', allTx.length)
+    console.log('[SumUp Verify] Latest:', allTx[0]?.timestamp, allTx[0]?.amount, allTx[0]?.status)
+
+    // Filtrar solo las de los últimos 15 minutos
+    const cutoff = Date.now() - 15 * 60 * 1000
+    const recentTx = allTx.filter(tx => {
+      const txTime = new Date(tx.timestamp).getTime()
+      return txTime >= cutoff
+    })
+
+    console.log('[SumUp Verify] Recent transactions (last 15min):', recentTx.length)
+
+    if (recentTx.length === 0) {
+      return NextResponse.json({
+        found: false,
+        message: `No hay transacciones en los últimos 15 minutos. La más reciente es de: ${allTx[0]?.timestamp ?? 'desconocida'}`,
+        debug: {
+          total_found: allTx.length,
+          latest_timestamp: allTx[0]?.timestamp,
+          latest_amount: allTx[0]?.amount,
+          latest_status: allTx[0]?.status,
+        }
+      })
+    }
+
+    // Buscar transacción que coincida con el monto (tolerancia ±100 CLP)
+    const successStatuses = ['SUCCESSFUL', 'successful', 'PAID', 'paid', 'APPROVED', 'approved']
+    const match = recentTx.find(tx =>
+      successStatuses.includes(tx.status) &&
+      Math.abs(Number(tx.amount) - targetAmount) <= 100
+    )
+
+    if (!match) {
+      // Si hay transacciones recientes pero no coincide el monto
+      const recentAmounts = recentTx.map(tx => `$${tx.amount} (${tx.status})`).join(', ')
+      return NextResponse.json({
+        found: false,
+        message: `No hay transacción de $${targetAmount.toLocaleString('es-CL')} en los últimos 15 minutos. Transacciones recientes: ${recentAmounts}`,
+      })
+    }
+
+    console.log('[SumUp Verify] ✅ Match found:', match.transaction_code, match.amount)
+
+    return NextResponse.json({
+      found: true,
+      transaction: {
+        id:           match.id,
+        tx_code:      match.transaction_code,
+        amount:       match.amount,
+        currency:     match.currency,
+        status:       match.status,
+        card_type:    match.card_type,
+        timestamp:    match.timestamp,
+        payment_type: match.payment_type,
+      },
+    })
 
   } catch (error: any) {
     console.error('[SumUp Verify] Error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-}
-
-function processTransactions(data: any, amount: number) {
-  const allTx: any[] = data.items ?? data.transactions ?? []
-  
-  console.log('[SumUp Verify] Total transactions found:', allTx.length)
-  console.log('[SumUp Verify] Statuses:', allTx.map(t => `${t.status}:${t.amount}`).join(', '))
-
-  // Accept any successful status variant
-  const successStatuses = ['SUCCESSFUL', 'successful', 'PAID', 'paid', 'APPROVED', 'approved', 'COMPLETED', 'completed']
-  const transactions = allTx.filter(tx => successStatuses.includes(tx.status))
-
-  if (transactions.length === 0) {
-    // Return all transactions for debugging
-    return NextResponse.json({
-      found: false,
-      message: `No hay transacciones exitosas recientes. Total encontradas: ${allTx.length}`,
-      debug_all_statuses: allTx.map(t => ({ status: t.status, amount: t.amount, timestamp: t.timestamp })),
-    })
-  }
-
-  const targetAmount = Number(amount)
-  // Match within ±100 CLP tolerance (in case of rounding)
-  const match = transactions.find(tx => Math.abs(Number(tx.amount) - targetAmount) <= 100)
-
-  if (!match) {
-    const found = transactions.map(tx => `$${tx.amount}`).join(', ')
-    return NextResponse.json({
-      found: false,
-      message: `No hay transacción de $${targetAmount.toLocaleString('es-CL')} en los últimos 15 minutos. Encontradas: ${found}`,
-      debug_transactions: transactions.map(t => ({ status: t.status, amount: t.amount })),
-    })
-  }
-
-  return NextResponse.json({
-    found: true,
-    transaction: {
-      id:           match.id,
-      tx_code:      match.transaction_code,
-      amount:       match.amount,
-      currency:     match.currency,
-      status:       match.status,
-      card_type:    match.card_type,
-      timestamp:    match.timestamp,
-      payment_type: match.payment_type,
-    },
-  })
 }
