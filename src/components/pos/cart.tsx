@@ -234,7 +234,7 @@ export default function Cart() {
       }
 
       // Transacción encontrada — registrar la venta
-      setVerifySuccess(`✅ Pago verificado · ${txToUse.card_type ?? 'Tarjeta'} · TX: ${txToUse.tx_code}`)
+      setVerifySuccess(`✅ Pago verificado · ${data.transaction?.card_type ?? 'Tarjeta'} · TX: ${data.transaction?.tx_code ?? ''}`)
 
       // Crear la orden
       const orderRes = await fetch('/api/orders', {
@@ -254,7 +254,7 @@ export default function Cart() {
           client_name: clientName.trim(),
           client_email: clientEmail.trim() || '',
           client_phone: clientPhone.trim() || null,
-          notes: `Smart POS · TX: ${txToUse.tx_code} · ${txToUse.card_type ?? ''}`,
+          notes: `Smart POS · TX: ${data.transaction?.tx_code ?? ''} · ${data.transaction?.card_type ?? ''}`,
           discount: 0,
         }),
       })
