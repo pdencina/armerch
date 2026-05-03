@@ -18,31 +18,32 @@ interface NavItem {
   icon: React.ReactNode
   roles: Role[]
   section: string
+  permKey?: string
 }
 
 const NAV_ITEMS: NavItem[] = [
   // ── General ──────────────────────────────────────────────
-  { label: 'Dashboard',        href: '/dashboard',           icon: <LayoutDashboard size={16} />, roles: ['voluntario', 'admin', 'super_admin'], section: 'General' },
+  { label: 'Dashboard',        href: '/dashboard', permKey: 'dashboard.view',           icon: <LayoutDashboard size={16} />, roles: ['voluntario', 'admin', 'super_admin'], section: 'General' },
 
   // ── Ventas ───────────────────────────────────────────────
-  { label: 'Punto de Venta',   href: '/pos',                 icon: <ShoppingCart size={16} />,    roles: ['voluntario', 'admin', 'super_admin'], section: 'Ventas' },
-  { label: 'Órdenes',          href: '/orders',              icon: <Receipt size={16} />,          roles: ['voluntario', 'admin', 'super_admin'], section: 'Ventas' },
-  { label: 'Pedidos entrega',  href: '/deliveries',          icon: <Truck size={16} />,            roles: ['voluntario', 'admin', 'super_admin'], section: 'Ventas' },
+  { label: 'Punto de Venta',   href: '/pos', permKey: 'pos.view',                 icon: <ShoppingCart size={16} />,    roles: ['voluntario', 'admin', 'super_admin'], section: 'Ventas' },
+  { label: 'Órdenes',          href: '/orders', permKey: 'orders.view',              icon: <Receipt size={16} />,          roles: ['voluntario', 'admin', 'super_admin'], section: 'Ventas' },
+  { label: 'Pedidos entrega',  href: '/deliveries', permKey: 'deliveries.view',          icon: <Truck size={16} />,            roles: ['voluntario', 'admin', 'super_admin'], section: 'Ventas' },
 
   // ── Inventario ───────────────────────────────────────────
-  { label: 'Inventario',       href: '/inventory',           icon: <Package size={16} />,          roles: ['admin', 'super_admin'],              section: 'Inventario' },
-  { label: 'Movimientos',      href: '/inventory/movements', icon: <ArrowLeftRight size={16} />,   roles: ['admin', 'super_admin'],              section: 'Inventario' },
+  { label: 'Inventario',       href: '/inventory', permKey: 'inventory.view',           icon: <Package size={16} />,          roles: ['admin', 'super_admin'],              section: 'Inventario' },
+  { label: 'Movimientos',      href: '/inventory/movements', permKey: 'movements.view', icon: <ArrowLeftRight size={16} />,   roles: ['admin', 'super_admin'],              section: 'Inventario' },
   { label: 'Transferencias',   href: '/transfers',           icon: <ArrowRightLeft size={16} />,   roles: ['super_admin'],                       section: 'Inventario' },
 
   // ── Gestión ──────────────────────────────────────────────
-  { label: 'Productos',        href: '/products',            icon: <ClipboardList size={16} />,    roles: ['admin', 'super_admin'],              section: 'Gestión' },
-  { label: 'Reportes',         href: '/reports',             icon: <BarChart3 size={16} />,        roles: ['admin', 'super_admin'],              section: 'Gestión' },
-  { label: 'Cierre de caja',   href: '/close-day',           icon: <Calculator size={16} />,       roles: ['admin', 'super_admin'],              section: 'Gestión' },
+  { label: 'Productos',        href: '/products', permKey: 'products.view',            icon: <ClipboardList size={16} />,    roles: ['admin', 'super_admin'],              section: 'Gestión' },
+  { label: 'Reportes',         href: '/reports', permKey: 'reports.view',             icon: <BarChart3 size={16} />,        roles: ['admin', 'super_admin'],              section: 'Gestión' },
+  { label: 'Cierre de caja',   href: '/close-day', permKey: 'close_day.view',           icon: <Calculator size={16} />,       roles: ['admin', 'super_admin'],              section: 'Gestión' },
 
   // ── Configuración ────────────────────────────────────────
   { label: 'Usuarios',         href: '/settings/users',      icon: <Users size={16} />,            roles: ['super_admin'],                       section: 'Configuración' },
   { label: 'Campus',           href: '/settings/campus',     icon: <MapPin size={16} />,           roles: ['super_admin'],                       section: 'Configuración' },
-  { label: 'Categorías',       href: '/settings/categories', icon: <Tags size={16} />,             roles: ['super_admin'],                       section: 'Configuración' },
+  { label: 'Categorías',       href: '/settings/categories', permKey: 'categories.view', icon: <Tags size={16} />,             roles: ['super_admin'],                       section: 'Configuración' },
   { label: 'Módulos',          href: '/settings/modules',    icon: <Layers size={16} />,           roles: ['super_admin'],                       section: 'Configuración' },
 
   // ── Mi cuenta ────────────────────────────────────────────
@@ -61,17 +62,24 @@ const ROLE_CONFIG: Record<Role, { label: string; color: string; description: str
 export default function Sidebar({
   role,
   campusName,
+  permissions = {},
   mobileOpen,
   onClose,
 }: {
   role: Role
   campusName?: string
+  permissions?: Record<string, boolean>
   mobileOpen?: boolean
   onClose?: () => void
 }) {
   const pathname = usePathname()
 
-  const visible = NAV_ITEMS.filter(i => i.roles.includes(role))
+  const visible = NAV_ITEMS.filter(i => {
+    if (!i.roles.includes(role)) return false
+    if (role === 'super_admin') return true
+    if (!i.permKey) return true
+    return permissions[i.permKey] !== false
+  })
   const config  = ROLE_CONFIG[role] ?? ROLE_CONFIG.voluntario
 
   return (
