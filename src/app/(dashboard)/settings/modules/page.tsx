@@ -2,205 +2,377 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { toast } from 'sonner'
+import { NotifyModal, useNotify } from '@/components/ui/notify-modal'
 import {
   ShoppingCart, Receipt, Package, ArrowLeftRight,
   ClipboardList, BarChart3, Calculator, Tags,
-  Shield, LayoutDashboard, RefreshCw,
+  Truck, Users, Settings, Barcode, RefreshCw,
+  ChevronDown, ChevronRight,
 } from 'lucide-react'
 
-// ── Definición de todos los módulos configurables ──────────────────────────
-const ALL_MODULES = [
-  { key: 'pos',        label: 'Punto de Venta',  icon: ShoppingCart,   section: 'Ventas',         superAdminOnly: false },
-  { key: 'orders',     label: 'Órdenes',          icon: Receipt,        section: 'Ventas',         superAdminOnly: false },
-  { key: 'inventory',  label: 'Inventario',       icon: Package,        section: 'Inventario',     superAdminOnly: false },
-  { key: 'movements',  label: 'Movimientos',      icon: ArrowLeftRight, section: 'Inventario',     superAdminOnly: false },
-  { key: 'products',   label: 'Productos',        icon: ClipboardList,  section: 'Gestión',        superAdminOnly: false },
-  { key: 'reports',    label: 'Reportes',         icon: BarChart3,      section: 'Gestión',        superAdminOnly: false },
-  { key: 'close_day',  label: 'Cierre de Caja',   icon: Calculator,     section: 'Gestión',        superAdminOnly: false },
-  { key: 'categories', label: 'Categorías',       icon: Tags,           section: 'Configuración',  superAdminOnly: false },
+// ── Módulos y permisos granulares ──────────────────────────────────────────
+const PERMISSION_GROUPS = [
+  {
+    section: '🛒 Ventas',
+    modules: [
+      {
+        key: 'pos',
+        label: 'Punto de Venta (POS)',
+        icon: ShoppingCart,
+        description: 'Acceso al POS para registrar ventas',
+        permissions: [
+          { key: 'pos.view',            label: 'Ver el POS' },
+          { key: 'pos.sell',            label: 'Registrar ventas' },
+          { key: 'pos.all_payments',    label: 'Usar todos los métodos de pago' },
+          { key: 'pos.discount',        label: 'Aplicar descuentos' },
+          { key: 'pos.smart_pos',       label: 'Cobrar con Smart POS' },
+          { key: 'pos.link_payment',    label: 'Enviar link de pago WhatsApp' },
+          { key: 'pos.pending_orders',  label: 'Crear pedidos bajo demanda' },
+        ]
+      },
+      {
+        key: 'orders',
+        label: 'Órdenes',
+        icon: Receipt,
+        description: 'Historial y gestión de órdenes',
+        permissions: [
+          { key: 'orders.view',         label: 'Ver órdenes' },
+          { key: 'orders.export',       label: 'Exportar órdenes' },
+          { key: 'orders.refund',       label: 'Anular/reembolsar órdenes' },
+        ]
+      },
+      {
+        key: 'deliveries',
+        label: 'Pedidos de Entrega',
+        icon: Truck,
+        description: 'Gestión de pedidos bajo demanda',
+        permissions: [
+          { key: 'deliveries.view',     label: 'Ver pedidos de entrega' },
+          { key: 'deliveries.ready',    label: 'Marcar como "Listo para entregar"' },
+          { key: 'deliveries.deliver',  label: 'Marcar como "Entregado al cliente"' },
+          { key: 'deliveries.whatsapp', label: 'Enviar notificación WhatsApp' },
+        ]
+      },
+    ]
+  },
+  {
+    section: '📦 Inventario',
+    modules: [
+      {
+        key: 'inventory',
+        label: 'Inventario',
+        icon: Package,
+        description: 'Ver y gestionar el stock',
+        permissions: [
+          { key: 'inventory.view',      label: 'Ver inventario' },
+          { key: 'inventory.movements', label: 'Registrar movimientos de stock' },
+          { key: 'inventory.scan',      label: 'Usar modo escaneo de inventario' },
+          { key: 'inventory.adjust',    label: 'Ajustar stock manualmente' },
+          { key: 'inventory.transfer',  label: 'Transferir entre campus' },
+        ]
+      },
+      {
+        key: 'movements',
+        label: 'Historial de Movimientos',
+        icon: ArrowLeftRight,
+        description: 'Ver el historial de movimientos de inventario',
+        permissions: [
+          { key: 'movements.view',      label: 'Ver historial de movimientos' },
+        ]
+      },
+    ]
+  },
+  {
+    section: '⚙️ Gestión',
+    modules: [
+      {
+        key: 'products',
+        label: 'Productos',
+        icon: ClipboardList,
+        description: 'Gestión del catálogo de productos',
+        permissions: [
+          { key: 'products.view',       label: 'Ver productos' },
+          { key: 'products.create',     label: 'Crear productos' },
+          { key: 'products.edit',       label: 'Editar productos' },
+          { key: 'products.delete',     label: 'Eliminar productos' },
+          { key: 'products.labels',     label: 'Generar etiquetas con código de barra' },
+          { key: 'products.prices',     label: 'Ver y editar precios' },
+        ]
+      },
+      {
+        key: 'reports',
+        label: 'Reportes',
+        icon: BarChart3,
+        description: 'Acceso a reportes y analíticas',
+        permissions: [
+          { key: 'reports.view',        label: 'Ver reportes' },
+          { key: 'reports.all_campus',  label: 'Ver reportes de todos los campus' },
+          { key: 'reports.export',      label: 'Exportar reportes' },
+        ]
+      },
+      {
+        key: 'close_day',
+        label: 'Cierre de Caja',
+        icon: Calculator,
+        description: 'Apertura y cierre de caja',
+        permissions: [
+          { key: 'close_day.view',      label: 'Ver cierre de caja' },
+          { key: 'close_day.open',      label: 'Abrir caja' },
+          { key: 'close_day.close',     label: 'Cerrar caja' },
+          { key: 'close_day.all',       label: 'Ver cierres de todos los campus' },
+        ]
+      },
+      {
+        key: 'categories',
+        label: 'Categorías',
+        icon: Tags,
+        description: 'Gestión de categorías de productos',
+        permissions: [
+          { key: 'categories.view',     label: 'Ver categorías' },
+          { key: 'categories.manage',   label: 'Crear y editar categorías' },
+        ]
+      },
+    ]
+  },
 ]
-
-// Módulos disponibles para cada rol (subset del total)
-const ROLE_MODULES: Record<string, string[]> = {
-  admin:      ['pos', 'orders', 'inventory', 'movements', 'products', 'reports', 'close_day', 'categories'],
-  voluntario: ['pos', 'orders'],
-}
 
 const ROLES = [
-  { key: 'admin',     label: 'Admin Campus',  color: 'bg-blue-500/15 text-blue-400 border-blue-500/25',    dot: 'bg-blue-400' },
-  { key: 'voluntario',label: 'Voluntario',    color: 'bg-green-500/15 text-green-400 border-green-500/25', dot: 'bg-green-400' },
+  { key: 'admin',      label: 'Admin',      color: 'text-blue-400',  bg: 'bg-blue-500/10 border-blue-500/20' },
+  { key: 'voluntario', label: 'Voluntario', color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/20' },
 ]
 
-type PermMap = Record<string, Record<string, boolean>> // { role: { module: enabled } }
+// Default permissions per role
+const DEFAULTS: Record<string, Record<string, boolean>> = {
+  admin: {
+    'pos.view': true, 'pos.sell': true, 'pos.all_payments': true, 'pos.discount': false,
+    'pos.smart_pos': true, 'pos.link_payment': true, 'pos.pending_orders': true,
+    'orders.view': true, 'orders.export': true, 'orders.refund': false,
+    'deliveries.view': true, 'deliveries.ready': false, 'deliveries.deliver': true, 'deliveries.whatsapp': true,
+    'inventory.view': true, 'inventory.movements': true, 'inventory.scan': true, 'inventory.adjust': false, 'inventory.transfer': false,
+    'movements.view': true,
+    'products.view': true, 'products.create': false, 'products.edit': false, 'products.delete': false, 'products.labels': true, 'products.prices': true,
+    'reports.view': true, 'reports.all_campus': false, 'reports.export': false,
+    'close_day.view': true, 'close_day.open': true, 'close_day.close': true, 'close_day.all': false,
+    'categories.view': true, 'categories.manage': false,
+  },
+  voluntario: {
+    'pos.view': true, 'pos.sell': true, 'pos.all_payments': false, 'pos.discount': false,
+    'pos.smart_pos': false, 'pos.link_payment': false, 'pos.pending_orders': false,
+    'orders.view': true, 'orders.export': false, 'orders.refund': false,
+    'deliveries.view': true, 'deliveries.ready': false, 'deliveries.deliver': true, 'deliveries.whatsapp': false,
+    'inventory.view': true, 'inventory.movements': false, 'inventory.scan': false, 'inventory.adjust': false, 'inventory.transfer': false,
+    'movements.view': false,
+    'products.view': true, 'products.create': false, 'products.edit': false, 'products.delete': false, 'products.labels': false, 'products.prices': false,
+    'reports.view': false, 'reports.all_campus': false, 'reports.export': false,
+    'close_day.view': false, 'close_day.open': false, 'close_day.close': false, 'close_day.all': false,
+    'categories.view': false, 'categories.manage': false,
+  },
+}
+
+type PermMap = Record<string, Record<string, boolean>>
 
 export default function ModulePermissionsPage() {
   const supabase = createClient()
-  const [perms, setPerms]       = useState<PermMap>({})
-  const [saving, setSaving]     = useState<string | null>(null)
-  const [loading, setLoading]   = useState(true)
+  const { notify, success, error, close } = useNotify()
+  const [perms, setPerms]     = useState<PermMap>(DEFAULTS)
+  const [saving, setSaving]   = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
-    const { data, error } = await supabase
+    const { data, err } = await supabase
       .from('module_permissions')
-      .select('module, role, enabled')
+      .select('module, role, enabled') as any
 
-    if (error) { toast.error(error.message); setLoading(false); return }
-
-    const map: PermMap = {}
-    ;(data ?? []).forEach((row: any) => {
-      if (!map[row.role]) map[row.role] = {}
-      map[row.role][row.module] = row.enabled
-    })
-    setPerms(map)
+    if (data?.length) {
+      const map: PermMap = { ...DEFAULTS }
+      data.forEach((row: any) => {
+        if (!map[row.role]) map[row.role] = {}
+        map[row.role][row.module] = row.enabled
+      })
+      setPerms(map)
+    }
     setLoading(false)
   }
 
-  async function toggle(role: string, module: string, current: boolean) {
-    const key = `${role}:${module}`
+  async function toggle(role: string, permKey: string, current: boolean) {
+    const key = `${role}:${permKey}`
     setSaving(key)
 
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) { toast.error('Sin sesión'); setSaving(null); return }
-
-    const { error } = await supabase
+    const { error: err } = await supabase
       .from('module_permissions')
-      .upsert({ module, role, enabled: !current, updated_at: new Date().toISOString() },
-               { onConflict: 'module,role' })
+      .upsert(
+        { module: permKey, role, enabled: !current, updated_at: new Date().toISOString() },
+        { onConflict: 'module,role' }
+      )
 
-    if (error) {
-      toast.error(`Error: ${error.message}`)
+    if (err) {
+      error('Error', err.message)
     } else {
       setPerms(prev => ({
         ...prev,
-        [role]: { ...(prev[role] ?? {}), [module]: !current }
+        [role]: { ...(prev[role] ?? {}), [permKey]: !current }
       }))
-      toast.success(`${!current ? 'Activado' : 'Desactivado'} para ${role}`)
     }
     setSaving(null)
   }
 
-  const sections = Array.from(new Set(ALL_MODULES.map(m => m.section)))
+  async function resetRole(role: string) {
+    setSaving(`reset:${role}`)
+    const defaults = DEFAULTS[role] ?? {}
+    const rows = Object.entries(defaults).map(([module, enabled]) => ({
+      module, role, enabled, updated_at: new Date().toISOString()
+    }))
+    await supabase.from('module_permissions').upsert(rows, { onConflict: 'module,role' })
+    setPerms(prev => ({ ...prev, [role]: defaults }))
+    setSaving(null)
+    success(`Permisos de ${role} restaurados`, 'Se aplicaron los valores por defecto', '🔄')
+  }
+
+  function toggleExpanded(key: string) {
+    setExpanded(prev => ({ ...prev, [key]: !prev[key] }))
+  }
 
   if (loading) {
     return (
-      <div className="flex h-48 items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-700 border-t-amber-500" />
+      <div className="flex items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
+      <NotifyModal notify={notify} onClose={close} />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold text-white">Permisos de Módulos</h1>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            Activa o desactiva módulos por rol. El Super Admin siempre tiene acceso completo.
-          </p>
-        </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-400 transition hover:text-white"
-        >
-          <RefreshCw size={12} /> Recargar
-        </button>
-      </div>
-
-      {/* Super Admin notice */}
-      <div className="flex items-center gap-3 rounded-xl border border-violet-500/20 bg-violet-500/8 px-4 py-3">
-        <Shield size={14} className="text-violet-400 shrink-0" />
-        <p className="text-xs text-violet-300">
-          <strong>Super Admin</strong> siempre tiene acceso a todos los módulos — no se puede restringir.
+      <div>
+        <h1 className="text-lg font-semibold text-white">Permisos por rol</h1>
+        <p className="text-xs text-zinc-500 mt-0.5">
+          Controla exactamente qué puede hacer cada rol en el sistema. El Super Admin siempre tiene acceso total.
         </p>
       </div>
 
-      {/* Role columns header */}
-      <div className="grid grid-cols-[1fr_repeat(2,_140px)] gap-3 px-1">
-        <div />
+      {/* Role columns */}
+      <div className="grid gap-4 lg:grid-cols-2">
         {ROLES.map(role => (
-          <div key={role.key} className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${role.color}`}>
-            <span className={`h-2 w-2 rounded-full ${role.dot}`} />
-            <span className="text-xs font-semibold">{role.label}</span>
+          <div key={role.key} className={`rounded-2xl border ${role.bg} overflow-hidden`}>
+            {/* Role header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+              <div>
+                <p className={`font-bold text-base ${role.color}`}>{role.label}</p>
+                <p className="text-[11px] text-zinc-500 mt-0.5">
+                  {Object.values(perms[role.key] ?? {}).filter(Boolean).length} de{' '}
+                  {Object.values(perms[role.key] ?? {}).length} permisos activos
+                </p>
+              </div>
+              <button
+                onClick={() => resetRole(role.key)}
+                disabled={saving === `reset:${role.key}`}
+                className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-400 transition hover:text-white"
+              >
+                <RefreshCw size={11} className={saving === `reset:${role.key}` ? 'animate-spin' : ''} />
+                Restaurar
+              </button>
+            </div>
+
+            {/* Permission groups */}
+            <div className="divide-y divide-white/5">
+              {PERMISSION_GROUPS.map(group => (
+                <div key={group.section}>
+                  {/* Section label */}
+                  <div className="px-5 py-2 bg-black/20">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                      {group.section}
+                    </p>
+                  </div>
+
+                  {/* Modules */}
+                  {group.modules.map(mod => {
+                    const expandKey = `${role.key}:${mod.key}`
+                    const isExpanded = expanded[expandKey]
+                    const ModIcon = mod.icon
+                    const activeCount = mod.permissions.filter(p => perms[role.key]?.[p.key]).length
+
+                    return (
+                      <div key={mod.key}>
+                        {/* Module header - clickable to expand */}
+                        <button
+                          onClick={() => toggleExpanded(expandKey)}
+                          className="w-full flex items-center gap-3 px-5 py-3 hover:bg-white/5 transition text-left"
+                        >
+                          <ModIcon size={14} className="text-zinc-500 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-zinc-300">{mod.label}</p>
+                          </div>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                            activeCount === mod.permissions.length
+                              ? 'bg-green-500/20 text-green-400'
+                              : activeCount === 0
+                              ? 'bg-red-500/10 text-red-400'
+                              : 'bg-amber-500/10 text-amber-400'
+                          }`}>
+                            {activeCount}/{mod.permissions.length}
+                          </span>
+                          {isExpanded
+                            ? <ChevronDown size={13} className="text-zinc-600 shrink-0" />
+                            : <ChevronRight size={13} className="text-zinc-600 shrink-0" />}
+                        </button>
+
+                        {/* Granular permissions */}
+                        {isExpanded && (
+                          <div className="bg-black/20 divide-y divide-white/5">
+                            {mod.permissions.map(perm => {
+                              const isEnabled = perms[role.key]?.[perm.key] ?? false
+                              const isSaving  = saving === `${role.key}:${perm.key}`
+
+                              return (
+                                <div key={perm.key} className="flex items-center justify-between px-8 py-2.5">
+                                  <p className="text-xs text-zinc-400">{perm.label}</p>
+                                  <button
+                                    onClick={() => toggle(role.key, perm.key, isEnabled)}
+                                    disabled={!!saving}
+                                    className={`relative flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                                      isEnabled ? 'bg-amber-500' : 'bg-zinc-700'
+                                    }`}
+                                  >
+                                    {isSaving
+                                      ? <span className="absolute inset-0 flex items-center justify-center">
+                                          <span className="h-3 w-3 animate-spin rounded-full border border-white/30 border-t-white" />
+                                        </span>
+                                      : <span className={`absolute h-3.5 w-3.5 rounded-full bg-white shadow transition-all ${
+                                          isEnabled ? 'left-[18px]' : 'left-[3px]'
+                                        }`} />
+                                    }
+                                  </button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Modules by section */}
-      {sections.map(section => {
-        const sectionModules = ALL_MODULES.filter(m => m.section === section)
-        return (
-          <div key={section} className="rounded-2xl border border-zinc-800 bg-zinc-900 overflow-hidden">
-            <div className="border-b border-zinc-800 bg-zinc-800/50 px-4 py-2.5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{section}</p>
-            </div>
-
-            <div className="divide-y divide-zinc-800">
-              {sectionModules.map(mod => {
-                const Icon = mod.icon
-                return (
-                  <div key={mod.key} className="grid grid-cols-[1fr_repeat(2,_140px)] gap-3 items-center px-4 py-3">
-
-                    {/* Module info */}
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-zinc-800">
-                        <Icon size={14} className="text-zinc-400" />
-                      </div>
-                      <span className="text-sm text-zinc-200">{mod.label}</span>
-                    </div>
-
-                    {/* Toggle per role */}
-                    {ROLES.map(role => {
-                      const isAvailable = ROLE_MODULES[role.key]?.includes(mod.key)
-                      const isEnabled   = perms[role.key]?.[mod.key] ?? false
-                      const isSaving    = saving === `${role.key}:${mod.key}`
-
-                      if (!isAvailable) {
-                        return (
-                          <div key={role.key} className="flex justify-center">
-                            <span className="text-[10px] text-zinc-700">N/A</span>
-                          </div>
-                        )
-                      }
-
-                      return (
-                        <div key={role.key} className="flex justify-center">
-                          <button
-                            onClick={() => toggle(role.key, mod.key, isEnabled)}
-                            disabled={!!saving}
-                            className={`relative flex h-6 w-11 items-center rounded-full transition-all duration-200 ${
-                              isEnabled ? 'bg-amber-500' : 'bg-zinc-700'
-                            } ${saving ? 'opacity-50' : 'cursor-pointer'}`}
-                          >
-                            {isSaving ? (
-                              <span className="absolute inset-0 flex items-center justify-center">
-                                <span className="h-3 w-3 animate-spin rounded-full border border-white/30 border-t-white" />
-                              </span>
-                            ) : (
-                              <span className={`absolute h-4 w-4 rounded-full bg-white shadow transition-all duration-200 ${
-                                isEnabled ? 'left-6' : 'left-1'
-                              }`} />
-                            )}
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )
-      })}
-
-      <p className="text-center text-xs text-zinc-600 pb-4">
-        Los cambios se aplican en la próxima carga de página de cada usuario.
-      </p>
+      {/* Legend */}
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3">Notas importantes</p>
+        <div className="space-y-1.5 text-xs text-zinc-500">
+          <p>• El <strong className="text-white">Super Admin</strong> siempre tiene acceso total a todo el sistema — sus permisos no se pueden restringir.</p>
+          <p>• Los permisos se aplican inmediatamente — el usuario verá los cambios en su próxima acción.</p>
+          <p>• Haz clic en cada módulo para ver y configurar los permisos granulares.</p>
+          <p>• El botón <strong className="text-white">Restaurar</strong> vuelve a los valores por defecto recomendados para ese rol.</p>
+        </div>
+      </div>
     </div>
   )
 }
