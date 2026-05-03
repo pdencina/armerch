@@ -15,6 +15,7 @@ interface Product {
   low_stock_alert: number | null
   category_id: string | null
   sku: string | null
+  barcode?: string | null
 }
 
 interface Props {
