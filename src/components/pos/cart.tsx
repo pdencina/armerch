@@ -180,6 +180,8 @@ export default function Cart() {
   const [verifySuccess, setVerifySuccess] = useState<string | null>(null)
   const [recentTxList, setRecentTxList] = useState<any[]>([])
   const [txCode, setTxCode] = useState('')
+  const [showTransferQR, setShowTransferQR] = useState(false)
+  const [transferTotal, setTransferTotal] = useState(0)
   const [sumupPolling, setSumupPolling] = useState(false)
   const [sumupStatus, setSumupStatus] = useState<'waiting' | 'found' | 'timeout'>('waiting')
   const sumupPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -368,7 +370,15 @@ export default function Cart() {
       }
 
       // ── Si es link de pago, crear checkout en SumUp primero ──
-      if (paymentMethod === 'link' && clientPhone.trim()) {
+      // ── Si es transferencia, mostrar QR antes de confirmar ──
+    if (paymentMethod === 'transferencia') {
+      setTransferTotal(total())
+      setShowTransferQR(true)
+      setSubmitting(false)
+      return
+    }
+
+    if (paymentMethod === 'link' && clientPhone.trim()) {
         const { data: { session: authSession } } = await supabase.auth.getSession()
         if (authSession?.access_token) {
           const checkoutRes = await fetch('/api/sumup/checkout', {
@@ -784,6 +794,104 @@ export default function Cart() {
               </>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* Transferencia QR Modal */}
+      {showTransferQR && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-sm rounded-3xl border border-zinc-700 bg-zinc-900 p-6 text-center shadow-2xl">
+            <h2 className="mb-1 text-lg font-bold text-white">Pago por Transferencia</h2>
+            <p className="mb-4 text-sm text-zinc-400">Muestra este QR al cliente</p>
+
+            {/* QR Code - usando API gratuita */}
+            <div className="mb-4 flex justify-center">
+              <div className="rounded-2xl bg-white p-3">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`banco=12&tipocuenta=1&cuenta=29100078943&rut=651080568&nombre=Iglesia Cristiana AR Ministries&monto=${transferTotal}&email=donaciones@armglobal.org`)}`}
+                  alt="QR Transferencia"
+                  width={180}
+                  height={180}
+                  className="rounded-xl"
+                />
+              </div>
+            </div>
+
+            {/* Datos bancarios */}
+            <div className="mb-5 rounded-2xl border border-zinc-700 bg-zinc-800 p-4 text-left space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">Banco</span>
+                <span className="font-medium text-white">Banco Estado</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">Tipo</span>
+                <span className="font-medium text-white">Cuenta Corriente</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">Número</span>
+                <span className="font-medium text-white font-mono">29100078943</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">RUT</span>
+                <span className="font-medium text-white">65.108.056-8</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">Titular</span>
+                <span className="font-medium text-white text-right max-w-[160px]">Iglesia Cristiana AR Ministries</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">Email</span>
+                <span className="font-medium text-white">donaciones@armglobal.org</span>
+              </div>
+              <div className="flex justify-between text-xs border-t border-zinc-700 pt-2 mt-2">
+                <span className="text-zinc-500">Total a transferir</span>
+                <span className="font-bold text-amber-400 text-sm">
+                  {new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(transferTotal)}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={async () => {
+                setShowTransferQR(false)
+                // Proceed with order creation
+                setSubmitting(true)
+                const supabase = createClient()
+                const { data: { session } } = await supabase.auth.getSession()
+                const res = await fetch('/api/orders', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                  body: JSON.stringify({
+                    payment_method: 'transferencia',
+                    items: items.map(i => ({ product_id: i.product.id, quantity: i.quantity, unit_price: i.product.price, size: i.size ?? null })),
+                    client_name: clientName.trim(),
+                    client_email: clientEmail?.trim() || '',
+                    client_phone: clientPhone?.trim() || null,
+                    notes: notes?.trim() || null,
+                    discount: 0,
+                  }),
+                })
+                const data = await res.json()
+                if (res.ok) {
+                  setCreatedOrder({ id: data.order_id, number: data.order_number ?? data.order_id, total: transferTotal, emailSent: data.email_sent })
+                  setSuccessOpen(true)
+                  setClientPhone('')
+                  clearCart()
+                }
+                setSubmitting(false)
+              }}
+              className="w-full rounded-2xl bg-amber-500 py-3 text-sm font-bold text-black transition hover:bg-amber-400 mb-3"
+            >
+              ✅ Cliente ya transfirió — Confirmar venta
+            </button>
+
+            <button
+              onClick={() => { setShowTransferQR(false); setSubmitting(false) }}
+              className="w-full text-xs text-zinc-600 hover:text-zinc-400 transition"
+            >
+              Cancelar
+            </button>
           </div>
         </div>
       )}
