@@ -1,50 +1,35 @@
 -- ============================================================
--- ARM MERCH — Migración: Sistema de permisos de módulos
+-- ARM MERCH — Tabla module_permissions
 -- Ejecutar en Supabase Dashboard → SQL Editor
 -- ============================================================
 
--- Tabla de permisos de módulos por rol
 CREATE TABLE IF NOT EXISTS module_permissions (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  module     TEXT NOT NULL,           -- ej: 'products', 'reports', 'inventory'
-  role       TEXT NOT NULL,           -- 'admin' | 'voluntario' (super_admin siempre ve todo)
-  enabled    BOOLEAN NOT NULL DEFAULT true,
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_by UUID REFERENCES profiles(id),
-  UNIQUE (module, role)
+  module     TEXT NOT NULL,
+  role       TEXT NOT NULL CHECK (role IN ('admin', 'voluntario')),
+  enabled    BOOLEAN NOT NULL DEFAULT false,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(module, role)
 );
 
--- RLS
 ALTER TABLE module_permissions ENABLE ROW LEVEL SECURITY;
 
--- Todos pueden leer (el sidebar necesita leer esto sin autenticación especial)
-CREATE POLICY "anyone_can_read" ON module_permissions
-  FOR SELECT USING (true);
+-- Drop policies if exist then recreate
+DROP POLICY IF EXISTS "super_admin_all" ON module_permissions;
+DROP POLICY IF EXISTS "authenticated_read" ON module_permissions;
 
--- Solo super_admin puede modificar
-CREATE POLICY "super_admin_can_modify" ON module_permissions
+-- Super admin puede hacer todo
+CREATE POLICY "super_admin_all" ON module_permissions
   FOR ALL USING (
     EXISTS (
       SELECT 1 FROM profiles
-      WHERE id = auth.uid() AND role = 'super_admin'
+      WHERE profiles.id = auth.uid()
+      AND profiles.role = 'super_admin'
     )
   );
 
--- Datos iniciales: todos los módulos habilitados para todos los roles
-INSERT INTO module_permissions (module, role, enabled) VALUES
-  -- Módulos para admin
-  ('pos',        'admin', true),
-  ('orders',     'admin', true),
-  ('inventory',  'admin', true),
-  ('movements',  'admin', true),
-  ('products',   'admin', true),
-  ('reports',    'admin', true),
-  ('close_day',  'admin', true),
-  ('categories', 'admin', true),
-  -- Módulos para voluntario
-  ('pos',        'voluntario', true),
-  ('orders',     'voluntario', true)
-ON CONFLICT (module, role) DO NOTHING;
+-- Cualquier usuario autenticado puede leer
+CREATE POLICY "authenticated_read" ON module_permissions
+  FOR SELECT USING (auth.uid() IS NOT NULL);
 
--- Verificar
-SELECT module, role, enabled FROM module_permissions ORDER BY role, module;
+SELECT 'module_permissions table ready' AS resultado;

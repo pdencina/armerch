@@ -13,6 +13,20 @@ import {
 // ── Módulos y permisos granulares ──────────────────────────────────────────
 const PERMISSION_GROUPS = [
   {
+    section: '📊 General',
+    modules: [
+      {
+        key: 'dashboard',
+        label: 'Dashboard',
+        icon: BarChart3,
+        description: 'Vista general con métricas y estadísticas',
+        permissions: [
+          { key: 'dashboard.view', label: 'Ver el Dashboard' },
+        ]
+      },
+    ]
+  },
+  {
     section: '🛒 Ventas',
     modules: [
       {
@@ -144,6 +158,7 @@ const ROLES = [
 // Default permissions per role
 const DEFAULTS: Record<string, Record<string, boolean>> = {
   admin: {
+    'dashboard.view': true,
     'pos.view': true, 'pos.sell': true, 'pos.all_payments': true, 'pos.discount': false,
     'pos.smart_pos': true, 'pos.link_payment': true, 'pos.pending_orders': true,
     'orders.view': true, 'orders.export': true, 'orders.refund': false,
@@ -156,6 +171,7 @@ const DEFAULTS: Record<string, Record<string, boolean>> = {
     'categories.view': true, 'categories.manage': false,
   },
   voluntario: {
+    'dashboard.view': false,
     'pos.view': true, 'pos.sell': true, 'pos.all_payments': false, 'pos.discount': false,
     'pos.smart_pos': false, 'pos.link_payment': false, 'pos.pending_orders': false,
     'orders.view': true, 'orders.export': false, 'orders.refund': false,
