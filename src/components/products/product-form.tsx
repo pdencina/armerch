@@ -20,6 +20,7 @@ export default function ProductForm({ categories, product }: Props) {
   const [description, setDescription] = useState(product?.description ?? '')
   const [price, setPrice]             = useState(product?.price?.toString() ?? '')
   const [sku, setSku]                 = useState(product?.sku ?? '')
+  const [barcode, setBarcode]           = useState((product as any)?.barcode ?? '')
   const [categoryId, setCategoryId]   = useState(product?.category_id ?? '')
   const [stock, setStock]             = useState(product?.stock?.toString() ?? '0')
   const [lowStock, setLowStock]       = useState(product?.low_stock_alert?.toString() ?? '5')
@@ -131,6 +132,19 @@ export default function ProductForm({ categories, product }: Props) {
           rows={3}
           className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition resize-none"
         />
+      </div>
+
+      {/* Código de barra EAN */}
+      <div>
+        <label className="block text-xs text-zinc-500 mb-1.5">Código de barra (EAN/UPC)</label>
+        <input
+          type="text"
+          value={barcode}
+          onChange={e => setBarcode(e.target.value)}
+          placeholder="Ej: 7802820000123"
+          className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition"
+        />
+        <p className="mt-1 text-[10px] text-zinc-600">Código de barra del fabricante para escaneo con lector físico</p>
       </div>
 
       {/* Precio y SKU */}

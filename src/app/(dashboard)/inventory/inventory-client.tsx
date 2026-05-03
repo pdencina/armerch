@@ -84,6 +84,14 @@ export default function InventoryClient({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-white">Inventario</h1>
+          <Link
+            href="/inventory/scan"
+            className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-500/20"
+          >
+            <Barcode size={15} />
+            Escaneo
+          </Link>
+
           {userCampusName && !isSuperAdmin ? (
             <div className="mt-1 flex items-center gap-1.5">
               <MapPin size={11} className="text-amber-400" />
