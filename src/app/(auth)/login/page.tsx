@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import './login.css'
 
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -34,7 +35,8 @@ export default function LoginPage() {
         return
       }
 
-      window.location.href = '/dashboard'
+      router.refresh()
+    router.push('/pos')
     } catch (err: any) {
       setError(err?.message ?? 'Error inesperado al iniciar sesión')
       setLoading(false)
