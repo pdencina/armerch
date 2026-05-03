@@ -57,7 +57,8 @@ export async function POST(req: NextRequest) {
     const clientEmail: string|null = String(body.client_email ?? '').trim().toLowerCase() || null
     const clientPhone: string|null = String(body.client_phone ?? '').trim() || null
 
-    if (!items.length || !clientName || !paymentMethod) {
+    const isSmartPOS = paymentMethod === 'credito' && body.notes?.includes('Smart POS')
+    if (!items.length || (!clientName && !isSmartPOS) || !paymentMethod) {
       return NextResponse.json(
         { error: 'Datos incompletos: items, nombre del cliente y método de pago son requeridos' },
         { status: 400 }
