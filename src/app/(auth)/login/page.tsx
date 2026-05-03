@@ -1,12 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import './login.css'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -36,8 +34,8 @@ export default function LoginPage() {
         return
       }
 
-      router.refresh()
-    router.push('/pos')
+      // Small delay to ensure Supabase cookies are set before navigation
+    setTimeout(() => { window.location.href = '/pos' }, 100)
     } catch (err: any) {
       setError(err?.message ?? 'Error inesperado al iniciar sesión')
       setLoading(false)

@@ -1,8 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password']
-
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
 
@@ -21,29 +19,8 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Use getSession() - reads from cookies without external call
-  // This avoids race condition right after login
-  const { data: { session } } = await supabase.auth.getSession()
-
-  const isPublic = PUBLIC_ROUTES.some(r => request.nextUrl.pathname.startsWith(r))
-  const isApi    = request.nextUrl.pathname.startsWith('/api/')
-  const isAsset  = request.nextUrl.pathname.startsWith('/_next') ||
-                   request.nextUrl.pathname.match(/\.(svg|ico|png|jpg|webp|css|js)$/)
-
-  // If asset or API, always pass through
-  if (isAsset || isApi) return response
-
-  // If not logged in and not on a public route, redirect to login
-  if (!session && !isPublic) {
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('next', request.nextUrl.pathname)
-    return NextResponse.redirect(loginUrl)
-  }
-
-  // If logged in and trying to access login, redirect to POS
-  if (session && request.nextUrl.pathname === '/login') {
-    return NextResponse.redirect(new URL('/pos', request.url))
-  }
+  // Refresh session — this is the only job of the middleware
+  await supabase.auth.getUser()
 
   return response
 }
