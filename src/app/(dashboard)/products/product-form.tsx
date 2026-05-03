@@ -22,6 +22,7 @@ type UserProfile = {
 
 export default function ProductForm() {
   const supabase = createClient()
+  const { notify, success, error: notifyError, close } = useNotify()
 
   const [loading, setLoading] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
