@@ -52,7 +52,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Campus', href: '/settings/campus', icon: <MapPin size={16} />, roles: ['super_admin'] },
   { label: 'Categorías', href: '/settings/categories', icon: <Tags size={16} />, roles: ['super_admin'] },
 
-  { label: 'Módulos' href: '/settings/modules', icon: <Layers size={16} />, roles: ['super_admin'], section: 'Configuración' },
+  { label: 'Módulos', href: '/settings/modules', icon: <Layers size={16} />, roles: ['super_admin'], section: 'Configuración' },
 
   { label: 'Mi perfil', href: '/profile', icon: <User size={16} />, roles: ['voluntario', 'admin', 'super_admin'], section: 'Mi cuenta' },
 ]
