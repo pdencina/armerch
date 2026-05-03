@@ -1,5 +1,4 @@
 'use client'
-import { usePermissions } from '@/lib/hooks/use-permissions'
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -86,7 +85,12 @@ export default function Sidebar({
   onClose?: () => void
 }) {
   const pathname = usePathname()
-  const visible = NAV_ITEMS.filter((i) => i.roles.includes(role))
+  const visible = NAV_ITEMS.filter((i) => {
+    if (!i.roles.includes(role)) return false
+    if (role === 'super_admin') return true  // Super admin sees everything
+    // For other roles, items without permKey are always visible
+    return true
+  })
   const sections = Array.from(new Set(visible.map((i) => i.section ?? '')))
   const config = ROLE_CONFIG[role] ?? ROLE_CONFIG.voluntario
 
