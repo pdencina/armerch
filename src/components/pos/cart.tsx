@@ -809,7 +809,7 @@ export default function Cart() {
             <div className="mb-4 flex justify-center">
               <div className="rounded-2xl bg-white p-3">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`banco=12&tipocuenta=1&cuenta=29100078943&rut=651080568&nombre=Iglesia Cristiana AR Ministries&monto=${transferTotal}&email=donaciones@armglobal.org`)}`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&bgcolor=ffffff&color=000000&data=${encodeURIComponent("Banco Estado | Cta Corriente\n29100078943\nRUT 65.108.056-8\nAR Ministries\nMonto: " + new Intl.NumberFormat("es-CL", {style:"currency",currency:"CLP",maximumFractionDigits:0}).format(transferTotal))}`}
                   alt="QR Transferencia"
                   width={180}
                   height={180}
